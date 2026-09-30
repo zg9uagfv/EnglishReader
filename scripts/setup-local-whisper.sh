@@ -124,7 +124,7 @@ xcodebuild -project EnglishReader.xcodeproj \
 
 app_path="${derived_data}/Build/Products/Debug/EnglishReader.app"
 if [[ -d "${app_path}" ]]; then
-  open -n "${app_path}"
+  open "${app_path}"
 fi
 
 print -- ""
