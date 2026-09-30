@@ -7,6 +7,8 @@ set -euo pipefail
 script_root="$(cd "$(dirname "$0")/.." && pwd)"
 runtime_root="${HOME}/.local/share/englishreader-whisper"
 python_path="${runtime_root}/bin/python"
+installer_python=""
+installer_python_version=""
 model_name="mlx-community/whisper-large-v3-turbo"
 download_model=true
 
@@ -40,8 +42,22 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-if ! command -v python3 >/dev/null; then
-  print -- "Python 3 is required. Install it with Xcode Command Line Tools or Homebrew, then run this script again."
+for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
+  if command -v "${candidate}" >/dev/null; then
+    candidate_path="$(command -v "${candidate}")"
+    candidate_version="$("${candidate_path}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    case "${candidate_version}" in
+      3.10|3.11|3.12|3.13)
+        installer_python="${candidate_path}"
+        installer_python_version="${candidate_version}"
+        break
+        ;;
+    esac
+  fi
+done
+
+if [[ -z "${installer_python}" ]]; then
+  print -- "Python 3.10–3.13 is required. Python 3.14 is not yet supported by WhisperMLX's Torch dependency."
   exit 1
 fi
 
@@ -56,8 +72,15 @@ if ! command -v curl >/dev/null || ! command -v unzip >/dev/null; then
 fi
 
 print -- "Creating local Whisper runtime at ${runtime_root}…"
+if [[ -x "${python_path}" ]]; then
+  runtime_version="$("${python_path}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+  if [[ "${runtime_version}" != "${installer_python_version}" ]]; then
+    print -- "Replacing incompatible Python ${runtime_version} runtime with Python ${installer_python_version}…"
+    rm -rf "${runtime_root}"
+  fi
+fi
 if [[ ! -x "${python_path}" ]]; then
-  python3 -m venv "${runtime_root}"
+  "${installer_python}" -m venv "${runtime_root}"
 fi
 
 print -- "Installing WhisperMLX…"
