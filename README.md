@@ -69,7 +69,21 @@ xcodebuild -project EnglishReader.xcodeproj \
 
 ## 本地 Whisper 部署（macOS / Apple Silicon）
 
-本地转写使用 `whispermlx` 的 MLX 运行时；适合 M 系列芯片。建议先在终端创建独立虚拟环境，避免污染系统 Python：
+本地转写使用 `whispermlx` 的 MLX 运行时；适合 M 系列芯片。新设备推荐使用仓库内的一键脚本（会安装运行时、对齐数据、默认高精度模型，构建并启动 macOS Debug 版）：
+
+```bash
+git clone git@github.com:zg9uagfv/EnglishReader.git
+cd EnglishReader
+./scripts/setup-local-whisper.sh
+```
+
+默认模型为 `mlx-community/whisper-large-v3-turbo`，会下载约 1.6GB 权重。仅准备运行时而暂不下载模型，可使用：
+
+```bash
+./scripts/setup-local-whisper.sh --skip-model
+```
+
+脚本完成后会显示需要填入应用偏好的 Python 路径。若需要手动部署或使用自定义模型，执行以下步骤：
 
 ```bash
 python3 -m venv "$HOME/.local/share/englishreader-whisper"
