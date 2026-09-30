@@ -66,6 +66,11 @@ struct ContentView: View {
             .onChange(of: wordPause) { _ in
                 applyLiveSettings(debounced: true)
             }
+            .onChange(of: childMode) { enabled in
+                if enabled && audio.isPlaying {
+                    audio.pause()
+                }
+            }
             .onChange(of: audio.transcriptionText) { transcription in
                 guard !transcription.isEmpty else { return }
                 text = transcription
@@ -385,16 +390,47 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
 
-                Button { audio.togglePlayback() } label: {
-                    Label(audio.isPlaying ? "暂停音频" : "播放音频", systemImage: audio.isPlaying ? "pause.fill" : "play.fill")
-                        .frame(minWidth: 110)
+                if childMode {
+                    Button {
+                        if speech.isSpeaking {
+                            speech.stop()
+                        } else {
+                            audio.pause()
+                            speech.speak(
+                                text,
+                                accent: accent,
+                                speed: speed,
+                                childMode: true,
+                                wordPause: wordPause,
+                                voiceIdentifier: selectedVoice
+                            )
+                        }
+                    } label: {
+                        Label(
+                            speech.isSpeaking ? "停止儿童跟读" : "儿童逐词跟读",
+                            systemImage: speech.isSpeaking ? "stop.fill" : "figure.and.child.holdinghands"
+                        )
+                        .frame(minWidth: 130)
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button { audio.togglePlayback() } label: {
+                        Label(audio.isPlaying ? "暂停音频" : "播放音频", systemImage: audio.isPlaying ? "pause.fill" : "play.fill")
+                            .frame(minWidth: 110)
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
 
                 Button { audio.skip(by: 15) } label: {
                     Label("前进 15 秒", systemImage: "goforward.15")
                 }
                 .buttonStyle(.bordered)
+            }
+
+            if childMode {
+                Label("儿童模式使用已识别文本逐词朗读；原始音频会暂停。", systemImage: "text.word.spacing")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(16)
@@ -427,7 +463,7 @@ struct ContentView: View {
     }
 
     private var activeSpokenWordIndex: Int? {
-        audio.hasAudio ? audio.currentSpokenWordIndex : speech.currentSpokenWordIndex
+        speech.isSpeaking ? speech.currentSpokenWordIndex : (audio.hasAudio ? audio.currentSpokenWordIndex : nil)
     }
 
     private var audioPlaybackRate: Float {

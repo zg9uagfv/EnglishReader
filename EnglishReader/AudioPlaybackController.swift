@@ -95,6 +95,11 @@ final class AudioPlaybackController: ObservableObject {
         }
     }
 
+    func pause() {
+        player?.pause()
+        isPlaying = false
+    }
+
     func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
         if isPlaying { player?.rate = rate }
