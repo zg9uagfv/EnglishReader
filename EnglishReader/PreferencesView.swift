@@ -92,7 +92,7 @@ struct PreferencesView: View {
                     Button("使用 OpenAI 默认配置") {
                         llmConfiguration.useOpenAIDefaults()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(ReaderOutlinedButtonStyle())
                     TextField("服务地址（例如 https://api.openai.com/v1）", text: $llmConfiguration.baseURL)
                     TextField("语音转文字模型", text: $llmConfiguration.transcriptionModel)
                     TextField("文字转语音模型", text: $llmConfiguration.speechModel)

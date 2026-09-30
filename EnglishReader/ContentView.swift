@@ -38,7 +38,7 @@ struct ContentView: View {
                 fontStyle: $fontStyle,
                 fontSize: $fontSize
             )
-            .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 420)
+            .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
         } detail: {
             NavigationStack {
                 ZStack {
@@ -110,66 +110,102 @@ struct ContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .tint(ReaderTheme.primary)
+        // This reader uses a deliberately light paper-like canvas. Keeping the
+        // complete split view in light appearance prevents macOS Form labels
+        // from becoming white against that canvas.
+        .preferredColorScheme(.light)
     }
 
     private var header: some View {
-        HStack(spacing: 16) {
-            Image(systemName: childMode ? "figure.and.child.holdinghands" : "book.closed.fill")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 52, height: 52)
-                .background(ReaderTheme.heroGradient, in: Circle())
-                .shadow(color: ReaderTheme.primary.opacity(0.25), radius: 8, y: 4)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(childMode ? "一起读英语吧！" : "英语阅读小伙伴")
-                    .font(.title3.weight(.bold))
-                Text("粘贴内容，或选择文本、Markdown、音频文件")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Text("\(wordCount) 个单词 · \(childMode ? "儿童逐词模式" : "自由阅读模式")")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(ReaderTheme.primary)
-            }
-            Spacer(minLength: 8)
-            HStack(spacing: 8) {
-                Button {
-                    if isEditingText {
-                        text = EnglishTextFormatter.formatArticle(text)
+        GeometryReader { geometry in
+            let isCompact = geometry.size.width < 720
+            Group {
+                if isCompact {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            headerIcon
+                            headerText
+                        }
+                        headerActions
                     }
-                    isEditingText.toggle()
-                } label: {
-                    Label(
-                        isEditingText ? "进入阅读" : "编辑文本",
-                        systemImage: isEditingText ? "play.circle.fill" : "square.and.pencil"
-                    )
+                } else {
+                    HStack(spacing: 16) {
+                        headerIcon
+                        headerText
+                        Spacer(minLength: 8)
+                        headerActions
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(ReaderTheme.primary)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(.white.opacity(0.9), lineWidth: 1)
+            }
+            .shadow(color: ReaderTheme.primary.opacity(0.10), radius: 14, y: 6)
+        }
+        .frame(height: 146)
+    }
 
-                Button {
-                    isImporting = true
-                } label: {
-                    Label("选择文件", systemImage: "doc.badge.plus")
-                }
-                .buttonStyle(.bordered)
+    private var headerIcon: some View {
+        Image(systemName: childMode ? "figure.and.child.holdinghands" : "book.closed.fill")
+            .font(.title2.weight(.bold))
+            .foregroundStyle(.white)
+            .frame(width: 52, height: 52)
+            .background(ReaderTheme.heroGradient, in: Circle())
+            .shadow(color: ReaderTheme.primary.opacity(0.25), radius: 8, y: 4)
+    }
 
-                Button {
-                    text = EnglishTextFormatter.formatArticle(text)
-                } label: {
-                    Label("自动排版", systemImage: "text.alignleft")
-                }
-                .buttonStyle(.bordered)
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    private var headerText: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(childMode ? "一起读英语吧！" : "英语阅读小伙伴")
+                .font(.title3.weight(.bold))
+            Text("粘贴内容，或选择文本、Markdown、音频文件")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Text("\(wordCount) 个单词 · \(childMode ? "儿童逐词模式" : "自由阅读模式")")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(ReaderTheme.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var headerActions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { headerPrimaryAction; headerSecondaryActions }
+            VStack(alignment: .leading, spacing: 8) {
+                headerPrimaryAction
+                headerSecondaryActions
             }
         }
-        .padding(16)
-        .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.white.opacity(0.9), lineWidth: 1)
+    }
+
+    private var headerPrimaryAction: some View {
+        Button {
+            if isEditingText { text = EnglishTextFormatter.formatArticle(text) }
+            isEditingText.toggle()
+        } label: {
+            Label(isEditingText ? "进入阅读" : "编辑文本", systemImage: isEditingText ? "play.circle.fill" : "square.and.pencil")
         }
-        .shadow(color: ReaderTheme.primary.opacity(0.10), radius: 14, y: 6)
+        .buttonStyle(ReaderFilledButtonStyle())
+    }
+
+    private var headerSecondaryActions: some View {
+        HStack(spacing: 8) {
+            Button { isImporting = true } label: {
+                Label("选择文件", systemImage: "doc.badge.plus")
+            }
+            .buttonStyle(ReaderOutlinedButtonStyle())
+
+            Button { text = EnglishTextFormatter.formatArticle(text) } label: {
+                Label("自动排版", systemImage: "text.alignleft")
+            }
+            .buttonStyle(ReaderOutlinedButtonStyle())
+            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
     }
 
     private var editor: some View {
@@ -366,8 +402,7 @@ struct ContentView: View {
                 )
                     .frame(minWidth: 110)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(speech.isSpeaking ? .red : .accentColor)
+            .buttonStyle(ReaderFilledButtonStyle(color: speech.isSpeaking ? .red : ReaderTheme.primary))
             .disabled(!speech.isSpeaking && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
             Button {
@@ -375,7 +410,7 @@ struct ContentView: View {
             } label: {
                 Label(speech.isPaused ? "继续" : "暂停", systemImage: speech.isPaused ? "play.fill" : "pause.fill")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(ReaderOutlinedButtonStyle())
             .disabled(!speech.isSpeaking)
 
             if llmConfiguration.isConfigured {
@@ -389,7 +424,7 @@ struct ContentView: View {
                         }
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(ReaderOutlinedButtonStyle())
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
@@ -443,7 +478,7 @@ struct ContentView: View {
                 Button { audio.skip(by: -15) } label: {
                     Label("后退 15 秒", systemImage: "gobackward.15")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(ReaderOutlinedButtonStyle())
 
                 if childMode {
                     Button {
@@ -467,19 +502,19 @@ struct ContentView: View {
                         )
                         .frame(minWidth: 130)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(ReaderFilledButtonStyle())
                 } else {
                     Button { audio.togglePlayback() } label: {
                         Label(audio.isPlaying ? "暂停音频" : "播放音频", systemImage: audio.isPlaying ? "pause.fill" : "play.fill")
                             .frame(minWidth: 110)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(ReaderFilledButtonStyle())
                 }
 
                 Button { audio.skip(by: 15) } label: {
                     Label("前进 15 秒", systemImage: "goforward.15")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(ReaderOutlinedButtonStyle())
             }
             .disabled(audio.isTranscribing)
 
@@ -619,6 +654,42 @@ private enum ReaderTheme {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+}
+
+/// Explicit button colors keep controls legible in both light and dark system appearances.
+struct ReaderFilledButtonStyle: ButtonStyle {
+    var color: Color = ReaderTheme.primary
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .fixedSize(horizontal: true, vertical: false)
+            .fontWeight(.semibold)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(color.opacity(configuration.isPressed ? 0.72 : 1), in: Capsule())
+            .contentShape(Capsule())
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+struct ReaderOutlinedButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .fixedSize(horizontal: true, vertical: false)
+            .fontWeight(.semibold)
+            .foregroundStyle(ReaderTheme.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(ReaderTheme.primary.opacity(configuration.isPressed ? 0.22 : 0.12), in: Capsule())
+            .overlay {
+                Capsule().stroke(ReaderTheme.primary.opacity(0.75), lineWidth: 1)
+            }
+            .contentShape(Capsule())
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
 }
 
 private enum FileImportError: LocalizedError {

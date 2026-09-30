@@ -83,7 +83,7 @@ struct WordDetailView: View {
             Button(action: speak) {
                 Label("发音", systemImage: "speaker.wave.2.fill")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(ReaderFilledButtonStyle())
             .accessibilityLabel("朗读单词")
         }
     }
