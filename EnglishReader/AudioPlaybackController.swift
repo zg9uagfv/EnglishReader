@@ -52,7 +52,7 @@ final class AudioPlaybackController: ObservableObject {
         transcriptionText = ""
         transcriptionStatus = shouldTranscribe ? "正在识别音频内容…" : nil
         isTranscribing = shouldTranscribe
-        self.playbackRate = playbackRate
+        self.playbackRate = clampedPlaybackRate(playbackRate)
         observe(player: player, item: item)
         if shouldTranscribe { transcribe(url: url, localeIdentifier: localeIdentifier) }
     }
@@ -112,8 +112,8 @@ final class AudioPlaybackController: ObservableObject {
     }
 
     func setPlaybackRate(_ rate: Float) {
-        playbackRate = rate
-        if isPlaying { player?.rate = rate }
+        playbackRate = clampedPlaybackRate(rate)
+        if isPlaying { player?.rate = playbackRate }
     }
 
     func seek(to seconds: Double) {
@@ -142,6 +142,10 @@ final class AudioPlaybackController: ObservableObject {
         guard seconds.isFinite, seconds > 0 else { return "00:00" }
         let totalSeconds = Int(seconds.rounded(.down))
         return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
+
+    private func clampedPlaybackRate(_ rate: Float) -> Float {
+        min(4.0, max(0.1, rate))
     }
 
     private func transcribe(url: URL, localeIdentifier: String) {

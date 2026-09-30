@@ -23,6 +23,8 @@ struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isScrubbingReadingProgress = false
     @State private var pendingReadingWordIndex = 0.0
+    @State private var isAudioProgressVisible = true
+    @State private var audioPlaybackRate = 1.0
 
     private var wordCount: Int {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
@@ -66,8 +68,15 @@ struct ContentView: View {
                 applyLiveSettings(debounced: false)
             }
             .onChange(of: speed) { _ in
-                audio.setPlaybackRate(audioPlaybackRate)
                 applyLiveSettings(debounced: true)
+            }
+            .onChange(of: audioPlaybackRate) { value in
+                let validated = min(4.0, max(0.1, value))
+                if validated != value {
+                    audioPlaybackRate = validated
+                } else {
+                    audio.setPlaybackRate(Float(validated))
+                }
             }
             .onChange(of: wordPause) { _ in
                 applyLiveSettings(debounced: true)
@@ -123,12 +132,11 @@ struct ContentView: View {
             let isCompact = geometry.size.width < 720
             Group {
                 if isCompact {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 12) {
-                            headerIcon
-                            headerText
-                        }
-                        headerActions
+                    HStack(spacing: 12) {
+                        headerIcon
+                        headerCompactText
+                        Spacer(minLength: 4)
+                        headerCompactActions
                     }
                 } else {
                     HStack(spacing: 16) {
@@ -148,7 +156,7 @@ struct ContentView: View {
             }
             .shadow(color: ReaderTheme.primary.opacity(0.10), radius: 14, y: 6)
         }
-        .frame(height: 146)
+        .frame(height: 84)
     }
 
     private var headerIcon: some View {
@@ -175,6 +183,19 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var headerCompactText: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(childMode ? "一起读英语吧！" : "英语阅读小伙伴")
+                .font(.headline)
+                .lineLimit(1)
+            Text("\(wordCount) 个单词 · \(childMode ? "儿童逐词模式" : "自由阅读模式")")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(ReaderTheme.primary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var headerActions: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) { headerPrimaryAction; headerSecondaryActions }
@@ -183,6 +204,31 @@ struct ContentView: View {
                 headerSecondaryActions
             }
         }
+    }
+
+    private var headerCompactActions: some View {
+        Menu {
+            Button {
+                if isEditingText { text = EnglishTextFormatter.formatArticle(text) }
+                isEditingText.toggle()
+            } label: {
+                Label(isEditingText ? "进入阅读" : "编辑文本", systemImage: isEditingText ? "play.circle.fill" : "square.and.pencil")
+            }
+
+            Button { isImporting = true } label: {
+                Label("选择文件", systemImage: "doc.badge.plus")
+            }
+
+            Button { text = EnglishTextFormatter.formatArticle(text) } label: {
+                Label("自动排版", systemImage: "text.alignleft")
+            }
+            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } label: {
+            Label("操作", systemImage: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .buttonStyle(ReaderFilledButtonStyle())
+        .accessibilityLabel("文章操作")
     }
 
     private var headerPrimaryAction: some View {
@@ -437,7 +483,7 @@ struct ContentView: View {
                     Task {
                         do {
                             let url = try await LLMService.synthesize(text: text, configuration: llmConfiguration)
-                            audio.load(url: url, localeIdentifier: accent.languageCode, playbackRate: audioPlaybackRate, shouldTranscribe: false)
+                            audio.load(url: url, localeIdentifier: accent.languageCode, playbackRate: Float(audioPlaybackRate), shouldTranscribe: false)
                         } catch {
                             errorMessage = "大模型语音生成失败：\(error.localizedDescription)"
                         }
@@ -453,18 +499,34 @@ struct ContentView: View {
     private var audioControls: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Image(systemName: "waveform")
-                    .foregroundStyle(.tint)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(audio.fileName).font(.headline).lineLimit(1)
-                    Text(audio.transcriptionStatus ?? "已识别音频文本")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform")
+                        .foregroundStyle(.tint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(audio.fileName).font(.headline).lineLimit(1)
+                        Text(audio.transcriptionStatus ?? "已识别音频文本")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
                 }
-                Spacer()
-                Text(String(format: "%.2g×", audio.playbackRate))
-                    .fontWeight(.semibold)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isAudioProgressVisible.toggle()
+                    }
+                }
+                .help(isAudioProgressVisible ? "点击隐藏播放进度" : "点击显示播放进度")
+
+                TextField("倍率", value: $audioPlaybackRate, format: .number.precision(.fractionLength(0...2)))
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
                     .monospacedDigit()
+                    .frame(width: 58)
+                    .accessibilityLabel("音频播放倍率，范围 0.1 到 4")
+                Text("×")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
             }
 
             if audio.isTranscribing {
@@ -475,73 +537,32 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Slider(
-                value: Binding(
-                    get: { audio.currentTime },
-                    set: { audio.seek(to: $0) }
-                ),
-                in: 0...max(audio.duration, 0.01)
-            )
-            .tint(.accentColor)
+            if isAudioProgressVisible {
+                Slider(
+                    value: Binding(
+                        get: { audio.currentTime },
+                        set: { audio.seek(to: $0) }
+                    ),
+                    in: 0...max(audio.duration, 0.01)
+                )
+                .tint(.accentColor)
+                .disabled(audio.isTranscribing)
+
+                HStack {
+                    Text(audio.formattedTime(audio.currentTime)).monospacedDigit()
+                    Spacer()
+                    Text(audio.formattedTime(audio.duration)).monospacedDigit()
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Button { audio.togglePlayback() } label: {
+                Label(audio.isPlaying ? "暂停音频" : "播放音频", systemImage: audio.isPlaying ? "pause.fill" : "play.fill")
+                    .frame(minWidth: 110)
+            }
+            .buttonStyle(ReaderFilledButtonStyle())
             .disabled(audio.isTranscribing)
-
-            HStack {
-                Text(audio.formattedTime(audio.currentTime)).monospacedDigit()
-                Spacer()
-                Text(audio.formattedTime(audio.duration)).monospacedDigit()
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            HStack(spacing: 24) {
-                Button { audio.skip(by: -15) } label: {
-                    Label("后退 15 秒", systemImage: "gobackward.15")
-                }
-                .buttonStyle(ReaderOutlinedButtonStyle())
-
-                if childMode {
-                    Button {
-                        if speech.isSpeaking {
-                            speech.stop()
-                        } else {
-                            audio.pause()
-                            speech.speak(
-                                text,
-                                accent: accent,
-                                speed: speed,
-                                childMode: true,
-                                wordPause: wordPause,
-                                voiceIdentifier: selectedVoice
-                            )
-                        }
-                    } label: {
-                        Label(
-                            speech.isSpeaking ? "停止儿童跟读" : "儿童逐词跟读",
-                            systemImage: speech.isSpeaking ? "stop.fill" : "figure.and.child.holdinghands"
-                        )
-                        .frame(minWidth: 130)
-                    }
-                    .buttonStyle(ReaderFilledButtonStyle())
-                } else {
-                    Button { audio.togglePlayback() } label: {
-                        Label(audio.isPlaying ? "暂停音频" : "播放音频", systemImage: audio.isPlaying ? "pause.fill" : "play.fill")
-                            .frame(minWidth: 110)
-                    }
-                    .buttonStyle(ReaderFilledButtonStyle())
-                }
-
-                Button { audio.skip(by: 15) } label: {
-                    Label("前进 15 秒", systemImage: "goforward.15")
-                }
-                .buttonStyle(ReaderOutlinedButtonStyle())
-            }
-            .disabled(audio.isTranscribing)
-
-            if childMode {
-                Label("儿童模式使用已识别文本逐词朗读；原始音频会暂停。", systemImage: "text.word.spacing")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .padding(16)
         .background(ReaderTheme.mint.opacity(0.27), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -603,10 +624,6 @@ struct ContentView: View {
         speech.isSpeaking ? speech.currentSpokenWordIndex : (audio.hasAudio ? audio.currentSpokenWordIndex : nil)
     }
 
-    private var audioPlaybackRate: Float {
-        Float(min(2.0, max(0.5, speed / 0.45)))
-    }
-
     private func importFile(_ result: Result<[URL], Error>) {
         do {
             guard let url = try result.get().first else { return }
@@ -624,7 +641,7 @@ struct ContentView: View {
                 audio.load(
                     url: url,
                     localeIdentifier: accent.languageCode,
-                    playbackRate: audioPlaybackRate,
+                    playbackRate: Float(audioPlaybackRate),
                     // A chosen Whisper service owns the transcript lifecycle, so
                     // playback only becomes available after it has completed.
                     shouldTranscribe: !usesLocalWhisper && !usesRemoteWhisper
