@@ -40,16 +40,19 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 420)
         } detail: {
             NavigationStack {
-            VStack(spacing: 20) {
-                header
-                if isEditingText {
-                    editor
-                } else {
-                    readingView
+                ZStack {
+                    ReaderTheme.canvas.ignoresSafeArea()
+                    VStack(spacing: 20) {
+                        header
+                        if isEditingText {
+                            editor
+                        } else {
+                            readingView
+                        }
+                        controls
+                    }
+                    .padding(24)
                 }
-                controls
-            }
-            .padding(24)
             .onChange(of: accent) { _ in
                 if !EnglishVoiceOption.available(for: accent).contains(where: { $0.identifier == selectedVoiceIdentifier }) {
                     selectedVoiceIdentifier = ""
@@ -73,7 +76,7 @@ struct ContentView: View {
             }
             .onChange(of: audio.transcriptionText) { transcription in
                 guard !transcription.isEmpty else { return }
-                text = transcription
+                text = EnglishTextFormatter.formatArticle(transcription)
                 isEditingText = false
             }
             .navigationTitle("英文文章朗读")
@@ -91,54 +94,70 @@ struct ContentView: View {
             } message: {
                 Text(errorMessage ?? "未知错误")
             }
-            .sheet(item: $selectedWord) { selection in
-                WordDetailView(word: selection.word, accent: accent) {
-                    speech.speakWord(selection.word, accent: accent, voiceIdentifier: selectedVoice)
-                }
-            }
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .tint(ReaderTheme.primary)
     }
 
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("粘贴英文内容，或选择文本、Markdown、音频文件")
-                    .font(.headline)
-                Text("当前共 \(wordCount) 个单词")
-                    .font(.subheadline)
+        HStack(spacing: 16) {
+            Image(systemName: childMode ? "figure.and.child.holdinghands" : "book.closed.fill")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(ReaderTheme.heroGradient, in: Circle())
+                .shadow(color: ReaderTheme.primary.opacity(0.25), radius: 8, y: 4)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(childMode ? "一起读英语吧！" : "英语阅读小伙伴")
+                    .font(.title3.weight(.bold))
+                Text("粘贴内容，或选择文本、Markdown、音频文件")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
+                Text("\(wordCount) 个单词 · \(childMode ? "儿童逐词模式" : "自由阅读模式")")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(ReaderTheme.primary)
             }
-            Spacer()
-            Button {
-                if isEditingText {
-                    text = EnglishTextFormatter.formatArticle(text)
+            Spacer(minLength: 8)
+            HStack(spacing: 8) {
+                Button {
+                    if isEditingText {
+                        text = EnglishTextFormatter.formatArticle(text)
+                    }
+                    isEditingText.toggle()
+                } label: {
+                    Label(
+                        isEditingText ? "进入阅读" : "编辑文本",
+                        systemImage: isEditingText ? "play.circle.fill" : "square.and.pencil"
+                    )
                 }
-                isEditingText.toggle()
-            } label: {
-                Label(
-                    isEditingText ? "进入阅读" : "编辑文本",
-                    systemImage: isEditingText ? "checkmark.circle.fill" : "square.and.pencil"
-                )
-            }
-            .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent)
+                .tint(ReaderTheme.primary)
 
-            Button {
-                isImporting = true
-            } label: {
-                Label("选择文件", systemImage: "doc.badge.plus")
-            }
-            .buttonStyle(.bordered)
+                Button {
+                    isImporting = true
+                } label: {
+                    Label("选择文件", systemImage: "doc.badge.plus")
+                }
+                .buttonStyle(.bordered)
 
-            Button {
-                text = EnglishTextFormatter.formatArticle(text)
-            } label: {
-                Label("自动排版", systemImage: "text.alignleft")
+                Button {
+                    text = EnglishTextFormatter.formatArticle(text)
+                } label: {
+                    Label("自动排版", systemImage: "text.alignleft")
+                }
+                .buttonStyle(.bordered)
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .buttonStyle(.bordered)
-            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
+        .padding(16)
+        .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.white.opacity(0.9), lineWidth: 1)
+        }
+        .shadow(color: ReaderTheme.primary.opacity(0.10), radius: 14, y: 6)
     }
 
     private var editor: some View {
@@ -147,10 +166,10 @@ struct ContentView: View {
             .lineSpacing(max(2, fontSize * 0.22))
             .padding(10)
             .scrollContentBackground(.hidden)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            .background(.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(.quaternary, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(ReaderTheme.primary.opacity(0.14), lineWidth: 1)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -167,9 +186,9 @@ struct ContentView: View {
                 }
             }
         }
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .background(.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12).stroke(.quaternary, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(ReaderTheme.primary.opacity(0.14), lineWidth: 1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -230,20 +249,35 @@ struct ContentView: View {
                     .onEnded { gesture in
                         switch gesture {
                         case .first(_):
+                            guard let word else { return }
+                            selectedWord = WordSelection(id: id, word: word)
+                        case .second(_):
                             guard word != nil else { return }
                             if highlightedTokens.contains(id) {
                                 highlightedTokens.remove(id)
                             } else {
                                 highlightedTokens.insert(id)
                             }
-                        case .second(_):
-                            guard let word else { return }
-                            speech.speakWord(word, accent: accent, voiceIdentifier: selectedVoice)
-                            selectedWord = WordSelection(word: word)
                         }
                     }
             )
-            .help(word == nil ? "" : "单击查词，双击高亮")
+            .popover(item: wordSelectionBinding(for: id), arrowEdge: .bottom) { selection in
+                WordDetailView(word: selection.word, accent: accent) {
+                    speech.speakWord(selection.word, accent: accent, voiceIdentifier: selectedVoice)
+                }
+            }
+            .help(word == nil ? "" : "双击查看音标和词义，单击高亮")
+    }
+
+    private func wordSelectionBinding(for tokenID: String) -> Binding<WordSelection?> {
+        Binding(
+            get: { selectedWord?.id == tokenID ? selectedWord : nil },
+            set: { selection in
+                if selection == nil, selectedWord?.id == tokenID {
+                    selectedWord = nil
+                }
+            }
+        )
     }
 
     private var formattedSentences: [String] {
@@ -294,7 +328,7 @@ struct ContentView: View {
                 .accessibilityValue("已朗读 \(completedWords)，共 \(wordCount) 个单词")
         }
         .padding(14)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .background(ReaderTheme.sunshine.opacity(0.20), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var ttsControls: some View {
@@ -367,6 +401,14 @@ struct ContentView: View {
                     .monospacedDigit()
             }
 
+            if audio.isTranscribing {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                Label("模型正在处理音频，完成后会自动整理为段落。", systemImage: "waveform.badge.magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Slider(
                 value: Binding(
                     get: { audio.currentTime },
@@ -375,6 +417,7 @@ struct ContentView: View {
                 in: 0...max(audio.duration, 0.01)
             )
             .tint(.accentColor)
+            .disabled(audio.isTranscribing)
 
             HStack {
                 Text(audio.formattedTime(audio.currentTime)).monospacedDigit()
@@ -426,6 +469,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
             }
+            .disabled(audio.isTranscribing)
 
             if childMode {
                 Label("儿童模式使用已识别文本逐词朗读；原始音频会暂停。", systemImage: "text.word.spacing")
@@ -434,9 +478,9 @@ struct ContentView: View {
             }
         }
         .padding(16)
-        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        .background(ReaderTheme.mint.opacity(0.27), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).stroke(Color.accentColor.opacity(0.22), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(ReaderTheme.mint.opacity(0.65), lineWidth: 1)
         }
     }
 
@@ -491,20 +535,21 @@ struct ContentView: View {
                     // Keep system recognition running as an immediate preview while
                     // a local Whisper model downloads/decodes. The local result
                     // replaces this preview when it completes.
-                    shouldTranscribe: !usesRemoteWhisper
+                    shouldTranscribe: !usesLocalWhisper && !usesRemoteWhisper
                 )
                 speech.stop()
                 if usesLocalWhisper {
-                    audio.setTranscriptionStatus("正在使用本地 Whisper 高精度转写…")
+                    audio.beginTranscription(status: "正在使用本地 Whisper 高精度转写…")
                     Task {
                         do {
                             audio.apply(transcription: try await LocalWhisperService.transcribe(url: url, configuration: configuration))
                         } catch {
-                            audio.setTranscriptionStatus("本地 Whisper 不可用，已使用系统识别结果")
+                            audio.finishTranscription(status: "本地 Whisper 转写失败")
                             errorMessage = "本地 Whisper 转写失败：\(error.localizedDescription)"
                         }
                     }
                 } else if usesRemoteWhisper {
+                    audio.beginTranscription(status: "正在使用大模型转写音频…")
                     Task {
                         do {
                             audio.apply(transcription: try await LLMService.transcribe(url: url, configuration: configuration))
@@ -536,6 +581,22 @@ struct ContentView: View {
     }
 }
 
+private enum ReaderTheme {
+    static let primary = Color(red: 0.29, green: 0.37, blue: 0.90)
+    static let mint = Color(red: 0.55, green: 0.89, blue: 0.78)
+    static let sunshine = Color(red: 1.00, green: 0.82, blue: 0.36)
+    static let heroGradient = LinearGradient(
+        colors: [Color(red: 0.31, green: 0.40, blue: 0.96), Color(red: 0.60, green: 0.35, blue: 0.92)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let canvas = LinearGradient(
+        colors: [Color(red: 0.96, green: 0.98, blue: 1.00), Color(red: 1.00, green: 0.97, blue: 0.90)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+}
+
 private enum FileImportError: LocalizedError {
     case unsupportedFormat
 
@@ -545,8 +606,8 @@ private enum FileImportError: LocalizedError {
 }
 
 private struct WordSelection: Identifiable {
+    let id: String
     let word: String
-    var id: String { word.lowercased() }
 }
 
 private struct ReadingToken {

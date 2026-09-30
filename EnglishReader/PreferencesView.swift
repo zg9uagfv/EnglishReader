@@ -9,10 +9,15 @@ struct PreferencesView: View {
     @Binding var wordPause: Double
     @Binding var fontStyle: DisplayFontStyle
     @Binding var fontSize: Double
+    @State private var isTTSExpanded = false
+    @State private var isChildModeExpanded = false
+    @State private var isTypographyExpanded = false
+    @State private var isLLMExpanded = false
+    @State private var isLocalWhisperExpanded = false
 
     var body: some View {
         Form {
-                Section {
+                DisclosureGroup(isExpanded: $isTTSExpanded) {
                     Picker("英语口音", selection: $accent) {
                         ForEach(EnglishAccent.allCases) { item in
                             Text(item.rawValue).tag(item)
@@ -33,13 +38,15 @@ struct PreferencesView: View {
                             Text(speedLabel).monospacedDigit().frame(width: 96, alignment: .trailing)
                         }
                     }
-                } header: {
-                    Label("TTS 发音", systemImage: "speaker.wave.2.fill")
-                } footer: {
                     Text("此语速同时控制系统朗读与上传音频播放。点词使用本地即时发音。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } label: {
+                    Label("TTS 发音", systemImage: "speaker.wave.2.fill")
+                        .font(.body.weight(.semibold))
                 }
 
-                Section {
+                DisclosureGroup(isExpanded: $isChildModeExpanded) {
                     Toggle("启用儿童模式", isOn: $childMode)
                     if childMode {
                         LabeledContent("单词间停顿") {
@@ -51,13 +58,15 @@ struct PreferencesView: View {
                             }
                         }
                     }
-                } header: {
-                    Label("儿童模式", systemImage: "figure.and.child.holdinghands")
-                } footer: {
                     Text("逐个朗读单词，并按设置时间停顿。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } label: {
+                    Label("儿童模式", systemImage: "figure.and.child.holdinghands")
+                        .font(.body.weight(.semibold))
                 }
 
-                Section {
+                DisclosureGroup(isExpanded: $isTypographyExpanded) {
                     Picker("字体", selection: $fontStyle) {
                         ForEach(DisplayFontStyle.allCases) { style in
                             Text(style.rawValue).tag(style)
@@ -74,35 +83,50 @@ struct PreferencesView: View {
                     Text("The quick brown fox jumps over the lazy dog.")
                         .font(.system(size: min(fontSize, 26), design: fontStyle.design))
                         .padding(.vertical, 6)
-                } header: {
+                } label: {
                     Label("文字显示", systemImage: "textformat.size")
+                        .font(.body.weight(.semibold))
                 }
 
-                Section {
+                DisclosureGroup(isExpanded: $isLLMExpanded) {
                     TextField("服务地址（例如 https://…/v1）", text: $llmConfiguration.baseURL)
                     TextField("语音转文字模型", text: $llmConfiguration.transcriptionModel)
                     TextField("文字转语音模型", text: $llmConfiguration.speechModel)
                     SecureField("API Key", text: $llmConfiguration.apiKey)
-                } header: {
-                    Label("大模型语音服务", systemImage: "brain.head.profile")
-                } footer: {
                     Text("兼容 OpenAI 的 /audio/transcriptions 与 /audio/speech 接口。API Key 仅保存在本机钥匙串。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } label: {
+                    Label("大模型语音服务", systemImage: "brain.head.profile")
+                        .font(.body.weight(.semibold))
                 }
 
-                Section {
+                DisclosureGroup(isExpanded: $isLocalWhisperExpanded) {
                     Toggle("优先使用本地 Whisper（仅 macOS）", isOn: $llmConfiguration.localWhisperEnabled)
                     if llmConfiguration.localWhisperEnabled {
                         TextField("模型名", text: $llmConfiguration.localWhisperModel)
                         TextField("模型目录（可选）", text: $llmConfiguration.localWhisperModelDirectory)
                         TextField("Python / Whisper 运行时路径", text: $llmConfiguration.localWhisperPythonPath)
                     }
-                } header: {
+                    Text("MacBook 上可配置例如 whisper-large-v3-turbo；iPad 自动回退到远程 API 或系统识别。运行时路径需指向已安装 whispermlx 的 Python。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } label: {
                     Label("本地 Whisper", systemImage: "laptopcomputer")
-                } footer: {
-                    Text("MacBook 上可配置例如 whisper-large-v3-turbo；iPad 自动回退到远程 API 或系统识别。运行时路径需指向已安装 mlx-whisper 的 Python。")
-                }
+                        .font(.body.weight(.semibold))
+            }
         }
         .formStyle(.grouped)
+        .font(.body)
+        .scrollContentBackground(.hidden)
+        .background(
+            LinearGradient(
+                colors: [Color(red: 0.94, green: 0.96, blue: 1.00), Color(red: 0.96, green: 1.00, blue: 0.96)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .tint(Color(red: 0.29, green: 0.37, blue: 0.90))
         .navigationTitle("偏好设置")
     }
 

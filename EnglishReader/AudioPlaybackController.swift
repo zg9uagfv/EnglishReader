@@ -12,6 +12,7 @@ final class AudioPlaybackController: ObservableObject {
     @Published private(set) var currentSpokenWordIndex: Int?
     @Published private(set) var transcriptionText = ""
     @Published private(set) var transcriptionStatus: String?
+    @Published private(set) var isTranscribing = false
 
     private struct TimedWord {
         let text: String
@@ -50,6 +51,7 @@ final class AudioPlaybackController: ObservableObject {
         currentSpokenWordIndex = nil
         transcriptionText = ""
         transcriptionStatus = shouldTranscribe ? "正在识别音频内容…" : nil
+        isTranscribing = shouldTranscribe
         self.playbackRate = playbackRate
         observe(player: player, item: item)
         if shouldTranscribe { transcribe(url: url, localeIdentifier: localeIdentifier) }
@@ -57,11 +59,18 @@ final class AudioPlaybackController: ObservableObject {
 
     func startSystemTranscription(url: URL, localeIdentifier: String) {
         transcriptionStatus = "正在使用系统语音识别…"
+        isTranscribing = true
         transcribe(url: url, localeIdentifier: localeIdentifier)
     }
 
-    func setTranscriptionStatus(_ status: String?) {
+    func beginTranscription(status: String) {
         transcriptionStatus = status
+        isTranscribing = true
+    }
+
+    func finishTranscription(status: String?) {
+        transcriptionStatus = status
+        isTranscribing = false
     }
 
     func apply(transcription: LLMTranscription) {
@@ -71,6 +80,7 @@ final class AudioPlaybackController: ObservableObject {
         })
         transcriptionText = timedWords.isEmpty ? EnglishTextFormatter.formatArticle(transcription.text) : alignedText(from: timedWords)
         transcriptionStatus = nil
+        isTranscribing = false
         updateCurrentWordIndex()
     }
 
@@ -82,10 +92,11 @@ final class AudioPlaybackController: ObservableObject {
         currentSpokenWordIndex = nil
         transcriptionText = ""
         transcriptionStatus = nil
+        isTranscribing = false
     }
 
     func togglePlayback() {
-        guard let player else { return }
+        guard !isTranscribing, let player else { return }
         if isPlaying {
             player.pause()
             isPlaying = false
@@ -106,7 +117,7 @@ final class AudioPlaybackController: ObservableObject {
     }
 
     func seek(to seconds: Double) {
-        guard let player else { return }
+        guard !isTranscribing, let player else { return }
         let target = min(max(0, seconds), duration)
         isSeeking = true
         currentTime = target
@@ -140,10 +151,12 @@ final class AudioPlaybackController: ObservableObject {
             let status = await Self.requestSpeechAuthorization()
             guard status == .authorized else {
                 self.transcriptionStatus = "需要允许“语音识别”权限，才能显示音频文本。"
+                self.isTranscribing = false
                 return
             }
             guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier)), recognizer.isAvailable else {
                 self.transcriptionStatus = "当前设备暂时无法进行音频识别。"
+                self.isTranscribing = false
                 return
             }
 
@@ -151,6 +164,7 @@ final class AudioPlaybackController: ObservableObject {
             let totalDuration = asset.duration.seconds
             guard totalDuration.isFinite, totalDuration > 0 else {
                 self.transcriptionStatus = "无法读取音频时长。"
+                self.isTranscribing = false
                 return
             }
 
@@ -178,8 +192,10 @@ final class AudioPlaybackController: ObservableObject {
                     self.updateCurrentWordIndex()
                 }
                 self.transcriptionStatus = nil
+                self.isTranscribing = false
             } catch {
                 self.transcriptionStatus = "音频识别失败：\(error.localizedDescription)"
+                self.isTranscribing = false
             }
         }
     }
@@ -313,6 +329,7 @@ final class AudioPlaybackController: ObservableObject {
         transcriptionTask = nil
         timedWords = []
         isPlaying = false
+        isTranscribing = false
     }
 }
 

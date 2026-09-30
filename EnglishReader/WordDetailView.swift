@@ -65,6 +65,9 @@ struct WordDetailView: View {
                 Text(definition.chineseDefinition)
                     .font(.body)
                     .textSelection(.enabled)
+                Label("来源：\(definition.sourceName)", systemImage: "network")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding(24)
         }
@@ -78,7 +81,7 @@ struct WordDetailView: View {
             }
             Spacer()
             Button(action: speak) {
-                Image(systemName: "speaker.wave.2.fill").font(.title2)
+                Label("发音", systemImage: "speaker.wave.2.fill")
             }
             .buttonStyle(.borderedProminent)
             .accessibilityLabel("朗读单词")
@@ -90,6 +93,18 @@ struct WordDetailView: View {
             Text(meaning.partOfSpeech).font(.headline).foregroundStyle(.blue)
             ForEach(meaning.definitions.indices, id: \.self) { index in
                 Text("\(index + 1). \(meaning.definitions[index])")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !meaning.examples.isEmpty {
+                Text("例句")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.top, 2)
+                ForEach(meaning.examples.indices, id: \.self) { index in
+                    Text("• \(meaning.examples[index])")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -97,4 +112,5 @@ struct WordDetailView: View {
     private func sectionTitle(_ title: String) -> some View {
         Text(title).font(.title2.bold())
     }
+
 }
