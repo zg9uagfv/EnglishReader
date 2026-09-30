@@ -21,6 +21,8 @@ struct ContentView: View {
     @State private var audioTranscriptText = ""
     @State private var selectedWord: WordSelection?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var isScrubbingReadingProgress = false
+    @State private var pendingReadingWordIndex = 0.0
 
     private var wordCount: Int {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
@@ -358,8 +360,11 @@ struct ContentView: View {
     }
 
     private var readingProgress: some View {
-        let completedWords = min(max(0, (activeSpokenWordIndex ?? -1) + 1), wordCount)
-        let progress = wordCount == 0 ? 0 : Double(completedWords) / Double(wordCount)
+        let completedWords = min(
+            max(0, speech.isSpeaking ? (activeSpokenWordIndex ?? -1) + 1 : Int(pendingReadingWordIndex.rounded())),
+            wordCount
+        )
+        let maximumWordIndex = max(0, wordCount - 1)
         return VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Label("文章朗读进度", systemImage: "text.line.first.and.arrowtriangle.forward")
@@ -370,10 +375,31 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            Slider(value: .constant(progress), in: 0...1)
-                .tint(.accentColor)
-                .allowsHitTesting(false)
-                .accessibilityValue("已朗读 \(completedWords)，共 \(wordCount) 个单词")
+            Slider(
+                value: Binding(
+                    get: {
+                        if isScrubbingReadingProgress { return pendingReadingWordIndex }
+                        if speech.isSpeaking {
+                            return Double(min(maximumWordIndex, activeSpokenWordIndex ?? 0))
+                        }
+                        return min(Double(maximumWordIndex), pendingReadingWordIndex)
+                    },
+                    set: { pendingReadingWordIndex = $0 }
+                ),
+                in: 0...Double(maximumWordIndex),
+                step: 1,
+                onEditingChanged: { isEditing in
+                    isScrubbingReadingProgress = isEditing
+                    if isEditing {
+                        pendingReadingWordIndex = Double(min(maximumWordIndex, activeSpokenWordIndex ?? 0))
+                    } else if speech.isSpeaking {
+                        seekTextReading(to: Int(pendingReadingWordIndex.rounded()))
+                    }
+                }
+            )
+            .tint(.accentColor)
+            .disabled(wordCount < 2)
+            .accessibilityValue("已定位到第 \(completedWords) 个词，共 \(wordCount) 个单词；拖动后从目标位置开始或继续朗读")
         }
         .padding(14)
         .background(ReaderTheme.sunshine.opacity(0.20), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -386,14 +412,7 @@ struct ContentView: View {
                     speech.stop()
                 } else {
                     isEditingText = false
-                    speech.speak(
-                        text,
-                        accent: accent,
-                        speed: speed,
-                        childMode: childMode,
-                        wordPause: wordPause,
-                        voiceIdentifier: selectedVoice
-                    )
+                    startTextReading()
                 }
             } label: {
                 Label(
@@ -547,6 +566,33 @@ struct ContentView: View {
                 voiceIdentifier: selectedVoice
             )
         }
+    }
+
+    private func startTextReading() {
+        if pendingReadingWordIndex.rounded() > 0 {
+            seekTextReading(to: Int(pendingReadingWordIndex.rounded()))
+        } else {
+            speech.speak(
+                text,
+                accent: accent,
+                speed: speed,
+                childMode: childMode,
+                wordPause: wordPause,
+                voiceIdentifier: selectedVoice
+            )
+        }
+    }
+
+    private func seekTextReading(to wordIndex: Int) {
+        speech.seek(
+            toWordAt: wordIndex,
+            in: text,
+            accent: accent,
+            speed: speed,
+            childMode: childMode,
+            wordPause: wordPause,
+            voiceIdentifier: selectedVoice
+        )
     }
 
     private var selectedVoice: String? {

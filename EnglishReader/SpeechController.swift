@@ -173,6 +173,46 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         }
     }
 
+    /// Restarts the current article at a word boundary so the reader can scrub
+    /// through text progress without AVSpeechSynthesizer needing random access.
+    func seek(
+        toWordAt requestedIndex: Int,
+        in text: String,
+        accent: EnglishAccent,
+        speed: Double,
+        childMode: Bool,
+        wordPause: Double,
+        voiceIdentifier: String?
+    ) {
+        let words = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+            .map(String.init)
+        guard !words.isEmpty else { return }
+
+        let index = min(max(0, requestedIndex), words.count - 1)
+        resetChildSequence()
+        isNormalSequenceActive = false
+        activeUtterances.removeAll()
+        synthesizer.stopSpeaking(at: .immediate)
+        isSpeaking = true
+        isPaused = false
+        currentSpokenWordIndex = index
+        selectedVoiceIdentifier = voiceIdentifier
+
+        if childMode {
+            childWords = words
+            nextChildWordIndex = index
+            childWordPause = wordPause
+            childAccent = accent
+            childSpeed = speed
+            isChildSequenceActive = true
+            speakNextChildWord()
+        } else {
+            startNormalSpeech(words[index...].joined(separator: " "), accent: accent, speed: speed, baseWordIndex: index)
+        }
+    }
+
     func stop() {
         wordAudioTask?.cancel()
         wordAudioPlayer?.pause()
