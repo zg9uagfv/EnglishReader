@@ -15,6 +15,8 @@
 		A10000000000000000000007 /* WordDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* WordDetailView.swift */; };
 		A10000000000000000000008 /* TextFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* TextFormatting.swift */; };
 		A10000000000000000000009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* PreferencesView.swift */; };
+		A1000000000000000000000A /* AudioPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* AudioPlaybackController.swift */; };
+		A1000000000000000000000B /* LLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* LLMService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +30,8 @@
 		A20000000000000000000008 /* WordDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordDetailView.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* TextFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextFormatting.swift; sourceTree = "<group>"; };
 		A2000000000000000000000A /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		A2000000000000000000000B /* AudioPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackController.swift; sourceTree = "<group>"; };
+		A2000000000000000000000C /* LLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +64,8 @@
 				A20000000000000000000008 /* WordDetailView.swift */,
 				A20000000000000000000009 /* TextFormatting.swift */,
 				A2000000000000000000000A /* PreferencesView.swift */,
+				A2000000000000000000000B /* AudioPlaybackController.swift */,
+				A2000000000000000000000C /* LLMService.swift */,
 			);
 			path = EnglishReader;
 			sourceTree = "<group>";
@@ -134,6 +140,8 @@
 				A10000000000000000000007 /* WordDetailView.swift in Sources */,
 				A10000000000000000000008 /* TextFormatting.swift in Sources */,
 				A10000000000000000000009 /* PreferencesView.swift in Sources */,
+				A1000000000000000000000A /* AudioPlaybackController.swift in Sources */,
+				A1000000000000000000000B /* LLMService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -152,6 +160,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "英文文章朗读";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于将上传的英语音频转换为可同步阅读的文本。";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 2.4;
@@ -174,6 +183,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "英文文章朗读";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于将上传的英语音频转换为可同步阅读的文本。";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 2.4;

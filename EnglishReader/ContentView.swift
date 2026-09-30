@@ -3,6 +3,8 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject private var speech = SpeechController()
+    @StateObject private var audio = AudioPlaybackController()
+    @StateObject private var llmConfiguration = LLMConfiguration()
     @State private var text = ""
     @State private var accent: EnglishAccent = .american
     @State private var speed = 0.45
@@ -17,7 +19,7 @@ struct ContentView: View {
     @State private var errorMessage: String?
     @State private var isEditingText = true
     @State private var selectedWord: WordSelection?
-    @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private var wordCount: Int {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
@@ -26,6 +28,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             PreferencesView(
+                llmConfiguration: llmConfiguration,
                 accent: $accent,
                 selectedVoiceIdentifier: $selectedVoiceIdentifier,
                 speed: $speed,
@@ -57,15 +60,21 @@ struct ContentView: View {
                 applyLiveSettings(debounced: false)
             }
             .onChange(of: speed) { _ in
+                audio.setPlaybackRate(audioPlaybackRate)
                 applyLiveSettings(debounced: true)
             }
             .onChange(of: wordPause) { _ in
                 applyLiveSettings(debounced: true)
             }
+            .onChange(of: audio.transcriptionText) { transcription in
+                guard !transcription.isEmpty else { return }
+                text = transcription
+                isEditingText = false
+            }
             .navigationTitle("英文文章朗读")
             .fileImporter(
                 isPresented: $isImporting,
-                allowedContentTypes: [.plainText, .utf8PlainText],
+                allowedContentTypes: [.item],
                 allowsMultipleSelection: false,
                 onCompletion: importFile
             )
@@ -90,7 +99,7 @@ struct ContentView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("粘贴英文内容，或导入文本文件")
+                Text("粘贴英文内容，或选择文本、Markdown、音频文件")
                     .font(.headline)
                 Text("当前共 \(wordCount) 个单词")
                     .font(.subheadline)
@@ -98,23 +107,13 @@ struct ContentView: View {
             }
             Spacer()
             Button {
-                columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-            } label: {
-                Label(
-                    columnVisibility == .detailOnly ? "显示偏好" : "隐藏偏好",
-                    systemImage: "sidebar.left"
-                )
-            }
-            .buttonStyle(.bordered)
-
-            Button {
                 if isEditingText {
                     text = EnglishTextFormatter.formatArticle(text)
                 }
                 isEditingText.toggle()
             } label: {
                 Label(
-                    isEditingText ? "完成编辑" : "编辑内容",
+                    isEditingText ? "进入阅读" : "编辑文本",
                     systemImage: isEditingText ? "checkmark.circle.fill" : "square.and.pencil"
                 )
             }
@@ -156,7 +155,7 @@ struct ContentView: View {
             ScrollView {
                 readingContent
             }
-            .onChange(of: speech.currentSpokenWordIndex) { index in
+            .onChange(of: activeSpokenWordIndex) { index in
                 guard let index else { return }
                 withAnimation(.easeInOut(duration: 0.25)) {
                     proxy.scrollTo("spoken-word-\(index)", anchor: .center)
@@ -202,11 +201,12 @@ struct ContentView: View {
 
     private func readingTokenView(_ token: ReadingToken, id: String, wordIndex: Int) -> some View {
         let word = token.lookupWord
-        let isCurrentlySpoken = speech.currentSpokenWordIndex == wordIndex
+        let isCurrentlySpoken = activeSpokenWordIndex == wordIndex
+        let hasBeenRead = (activeSpokenWordIndex ?? -1) >= wordIndex
         return Text(token.display)
             .font(.system(size: fontSize, design: fontStyle.design))
             .fontWeight(isCurrentlySpoken ? .bold : .regular)
-            .foregroundStyle(word == nil ? Color.primary : Color.blue)
+            .foregroundStyle(hasBeenRead ? Color.blue : Color.primary)
             .padding(.horizontal, 2)
             .padding(.vertical, 3)
             .background(
@@ -259,13 +259,46 @@ struct ContentView: View {
     }
 
     private var controls: some View {
+        VStack(spacing: 14) {
+            if audio.hasAudio {
+                audioControls
+            } else if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                readingProgress
+                ttsControls
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var readingProgress: some View {
+        let completedWords = min(max(0, (activeSpokenWordIndex ?? -1) + 1), wordCount)
+        let progress = wordCount == 0 ? 0 : Double(completedWords) / Double(wordCount)
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Label("文章朗读进度", systemImage: "text.line.first.and.arrowtriangle.forward")
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("\(completedWords) / \(wordCount) 词")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(value: .constant(progress), in: 0...1)
+                .tint(.accentColor)
+                .allowsHitTesting(false)
+                .accessibilityValue("已朗读 \(completedWords)，共 \(wordCount) 个单词")
+        }
+        .padding(14)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var ttsControls: some View {
         HStack(spacing: 12) {
             Button {
                 if speech.isSpeaking {
                     speech.stop()
                 } else {
                     isEditingText = false
-                    columnVisibility = .detailOnly
                     speech.speak(
                         text,
                         accent: accent,
@@ -294,6 +327,80 @@ struct ContentView: View {
             .buttonStyle(.bordered)
             .disabled(!speech.isSpeaking)
 
+            if llmConfiguration.isConfigured {
+                Button("大模型生成音频") {
+                    Task {
+                        do {
+                            let url = try await LLMService.synthesize(text: text, configuration: llmConfiguration)
+                            audio.load(url: url, localeIdentifier: accent.languageCode, playbackRate: audioPlaybackRate, shouldTranscribe: false)
+                        } catch {
+                            errorMessage = "大模型语音生成失败：\(error.localizedDescription)"
+                        }
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+        }
+    }
+
+    private var audioControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform")
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(audio.fileName).font(.headline).lineLimit(1)
+                    Text(audio.transcriptionStatus ?? "已识别音频文本")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(String(format: "%.2g×", audio.playbackRate))
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+            }
+
+            Slider(
+                value: Binding(
+                    get: { audio.currentTime },
+                    set: { audio.seek(to: $0) }
+                ),
+                in: 0...max(audio.duration, 0.01)
+            )
+            .tint(.accentColor)
+
+            HStack {
+                Text(audio.formattedTime(audio.currentTime)).monospacedDigit()
+                Spacer()
+                Text(audio.formattedTime(audio.duration)).monospacedDigit()
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            HStack(spacing: 24) {
+                Button { audio.skip(by: -15) } label: {
+                    Label("后退 15 秒", systemImage: "gobackward.15")
+                }
+                .buttonStyle(.bordered)
+
+                Button { audio.togglePlayback() } label: {
+                    Label(audio.isPlaying ? "暂停音频" : "播放音频", systemImage: audio.isPlaying ? "pause.fill" : "play.fill")
+                        .frame(minWidth: 110)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button { audio.skip(by: 15) } label: {
+                    Label("前进 15 秒", systemImage: "goforward.15")
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(16)
+        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14).stroke(Color.accentColor.opacity(0.22), lineWidth: 1)
         }
     }
 
@@ -319,24 +426,85 @@ struct ContentView: View {
         selectedVoiceIdentifier.isEmpty ? nil : selectedVoiceIdentifier
     }
 
+    private var activeSpokenWordIndex: Int? {
+        audio.hasAudio ? audio.currentSpokenWordIndex : speech.currentSpokenWordIndex
+    }
+
+    private var audioPlaybackRate: Float {
+        Float(min(2.0, max(0.5, speed / 0.45)))
+    }
+
     private func importFile(_ result: Result<[URL], Error>) {
         do {
             guard let url = try result.get().first else { return }
-            let hasAccess = url.startAccessingSecurityScopedResource()
-            defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
-
-            if let content = try? String(contentsOf: url, encoding: .utf8) {
-                text = EnglishTextFormatter.formatArticle(content)
-            } else if let content = try? String(contentsOf: url, encoding: .ascii) {
-                text = EnglishTextFormatter.formatArticle(content)
-            } else {
-                throw CocoaError(.fileReadInapplicableStringEncoding)
+            let resourceValues = try url.resourceValues(forKeys: [.contentTypeKey, .isDirectoryKey])
+            guard resourceValues.isDirectory != true else {
+                throw FileImportError.unsupportedFormat
             }
-            speech.stop()
-            isEditingText = false
+
+            let contentType = resourceValues.contentType ?? UTType(filenameExtension: url.pathExtension)
+            let fileExtension = url.pathExtension.lowercased()
+            if contentType?.conforms(to: .audio) == true {
+                let configuration = llmConfiguration
+                let usesLocalWhisper = configuration.localWhisperEnabled
+                let usesRemoteWhisper = !usesLocalWhisper && configuration.isConfigured
+                audio.load(
+                    url: url,
+                    localeIdentifier: accent.languageCode,
+                    playbackRate: audioPlaybackRate,
+                    // Keep system recognition running as an immediate preview while
+                    // a local Whisper model downloads/decodes. The local result
+                    // replaces this preview when it completes.
+                    shouldTranscribe: !usesRemoteWhisper
+                )
+                speech.stop()
+                if usesLocalWhisper {
+                    audio.setTranscriptionStatus("正在使用本地 Whisper 高精度转写…")
+                    Task {
+                        do {
+                            audio.apply(transcription: try await LocalWhisperService.transcribe(url: url, configuration: configuration))
+                        } catch {
+                            audio.setTranscriptionStatus("本地 Whisper 不可用，已使用系统识别结果")
+                            errorMessage = "本地 Whisper 转写失败：\(error.localizedDescription)"
+                        }
+                    }
+                } else if usesRemoteWhisper {
+                    Task {
+                        do {
+                            audio.apply(transcription: try await LLMService.transcribe(url: url, configuration: configuration))
+                        } catch {
+                            audio.startSystemTranscription(url: url, localeIdentifier: accent.languageCode)
+                            errorMessage = "大模型转写失败，已回退系统识别：\(error.localizedDescription)"
+                        }
+                    }
+                }
+            } else if contentType?.conforms(to: .text) == true || ["txt", "md", "markdown"].contains(fileExtension) {
+                let hasAccess = url.startAccessingSecurityScopedResource()
+                defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+                if let content = try? String(contentsOf: url, encoding: .utf8) {
+                    text = EnglishTextFormatter.formatArticle(content)
+                } else if let content = try? String(contentsOf: url, encoding: .ascii) {
+                    text = EnglishTextFormatter.formatArticle(content)
+                } else {
+                    throw CocoaError(.fileReadInapplicableStringEncoding)
+                }
+                audio.unload()
+                speech.stop()
+                isEditingText = false
+            } else {
+                throw FileImportError.unsupportedFormat
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.localizedDescription.isEmpty ? FileImportError.unsupportedFormat.localizedDescription : error.localizedDescription
         }
+    }
+}
+
+private enum FileImportError: LocalizedError {
+    case unsupportedFormat
+
+    var errorDescription: String? {
+        "无法识别该文件格式。请上传文本或 Markdown 文件（.txt、.md、.markdown），或音频文件（如 .mp3、.m4a、.wav）。"
     }
 }
 
