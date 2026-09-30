@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var isImporting = false
     @State private var errorMessage: String?
     @State private var isEditingText = true
+    @State private var audioTranscriptText = ""
     @State private var selectedWord: WordSelection?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
@@ -76,8 +77,19 @@ struct ContentView: View {
             }
             .onChange(of: audio.transcriptionText) { transcription in
                 guard !transcription.isEmpty else { return }
-                text = EnglishTextFormatter.formatArticle(transcription)
+                let formattedTranscript = EnglishTextFormatter.formatArticle(transcription)
+                audioTranscriptText = formattedTranscript
+                text = formattedTranscript
                 isEditingText = false
+            }
+            .onChange(of: text) { updatedText in
+                guard isEditingText,
+                      audio.hasAudio,
+                      updatedText != audioTranscriptText else { return }
+                // The source text has diverged from the audio transcript. Keeping
+                // the old player here would make the play button use stale audio.
+                audio.unload()
+                speech.stop()
             }
             .navigationTitle("英文文章朗读")
             .fileImporter(
@@ -532,9 +544,8 @@ struct ContentView: View {
                     url: url,
                     localeIdentifier: accent.languageCode,
                     playbackRate: audioPlaybackRate,
-                    // Keep system recognition running as an immediate preview while
-                    // a local Whisper model downloads/decodes. The local result
-                    // replaces this preview when it completes.
+                    // A chosen Whisper service owns the transcript lifecycle, so
+                    // playback only becomes available after it has completed.
                     shouldTranscribe: !usesLocalWhisper && !usesRemoteWhisper
                 )
                 speech.stop()
@@ -545,7 +556,7 @@ struct ContentView: View {
                             audio.apply(transcription: try await LocalWhisperService.transcribe(url: url, configuration: configuration))
                         } catch {
                             audio.finishTranscription(status: "本地 Whisper 转写失败")
-                            errorMessage = "本地 Whisper 转写失败：\(error.localizedDescription)"
+                            errorMessage = "本地 Whisper 转写失败：\(transcriptionErrorMessage(error))"
                         }
                     }
                 } else if usesRemoteWhisper {
@@ -555,7 +566,7 @@ struct ContentView: View {
                             audio.apply(transcription: try await LLMService.transcribe(url: url, configuration: configuration))
                         } catch {
                             audio.startSystemTranscription(url: url, localeIdentifier: accent.languageCode)
-                            errorMessage = "大模型转写失败，已回退系统识别：\(error.localizedDescription)"
+                            errorMessage = "大模型转写失败，已回退系统识别：\(transcriptionErrorMessage(error))"
                         }
                     }
                 }
@@ -578,6 +589,19 @@ struct ContentView: View {
         } catch {
             errorMessage = error.localizedDescription.isEmpty ? FileImportError.unsupportedFormat.localizedDescription : error.localizedDescription
         }
+    }
+
+    private func transcriptionErrorMessage(_ error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut: return "请求超时，请检查服务地址和网络。"
+            case .cannotConnectToHost, .cannotFindHost, .notConnectedToInternet:
+                return "无法连接服务，请检查服务地址和网络。"
+            default: break
+            }
+        }
+        let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? "服务未返回详细错误，请检查 API 地址、模型名和 API Key。" : message
     }
 }
 

@@ -14,6 +14,11 @@ struct LLMTranscription: Sendable {
 
 @MainActor
 final class LLMConfiguration: ObservableObject {
+    static let openAIBaseURL = "https://api.openai.com/v1"
+    static let openAITranscriptionModel = "gpt-4o-mini-transcribe"
+    static let openAISpeechModel = "gpt-4o-mini-tts"
+    private static let didApplyOpenAIServiceDefaultsKey = "didApplyOpenAIServiceDefaults"
+
     @Published var baseURL: String { didSet { save() } }
     @Published var transcriptionModel: String { didSet { save() } }
     @Published var speechModel: String { didSet { save() } }
@@ -26,15 +31,35 @@ final class LLMConfiguration: ObservableObject {
     var isConfigured: Bool { !baseURL.isEmpty && !transcriptionModel.isEmpty && !apiKey.isEmpty }
 
     init() {
-        baseURL = UserDefaults.standard.string(forKey: "llmBaseURL") ?? ""
-        transcriptionModel = UserDefaults.standard.string(forKey: "llmTranscriptionModel") ?? "whisper-1"
-        speechModel = UserDefaults.standard.string(forKey: "llmSpeechModel") ?? "gpt-4o-mini-tts"
+        let defaults = UserDefaults.standard
+        let shouldApplyOpenAIDefaults = !defaults.bool(forKey: Self.didApplyOpenAIServiceDefaultsKey)
+        baseURL = shouldApplyOpenAIDefaults
+            ? Self.openAIBaseURL
+            : defaults.string(forKey: "llmBaseURL") ?? Self.openAIBaseURL
+        transcriptionModel = shouldApplyOpenAIDefaults
+            ? Self.openAITranscriptionModel
+            : defaults.string(forKey: "llmTranscriptionModel") ?? Self.openAITranscriptionModel
+        speechModel = shouldApplyOpenAIDefaults
+            ? Self.openAISpeechModel
+            : defaults.string(forKey: "llmSpeechModel") ?? Self.openAISpeechModel
         apiKey = Keychain.load() ?? ""
-        localWhisperEnabled = UserDefaults.standard.bool(forKey: "localWhisperEnabled")
-        localWhisperModel = UserDefaults.standard.string(forKey: "localWhisperModel") ?? "mlx-community/whisper-large-v3-turbo"
-        localWhisperModelDirectory = UserDefaults.standard.string(forKey: "localWhisperModelDirectory") ?? ""
-        let savedRuntime = UserDefaults.standard.string(forKey: "localWhisperPythonPath") ?? ""
+        localWhisperEnabled = defaults.bool(forKey: "localWhisperEnabled")
+        localWhisperModel = defaults.string(forKey: "localWhisperModel") ?? "mlx-community/whisper-large-v3-turbo"
+        localWhisperModelDirectory = defaults.string(forKey: "localWhisperModelDirectory") ?? ""
+        let savedRuntime = defaults.string(forKey: "localWhisperPythonPath") ?? ""
         localWhisperPythonPath = savedRuntime.isEmpty ? Self.detectLocalWhisperRuntime() : savedRuntime
+        if shouldApplyOpenAIDefaults {
+            defaults.set(baseURL, forKey: "llmBaseURL")
+            defaults.set(transcriptionModel, forKey: "llmTranscriptionModel")
+            defaults.set(speechModel, forKey: "llmSpeechModel")
+            defaults.set(true, forKey: Self.didApplyOpenAIServiceDefaultsKey)
+        }
+    }
+
+    func useOpenAIDefaults() {
+        baseURL = Self.openAIBaseURL
+        transcriptionModel = Self.openAITranscriptionModel
+        speechModel = Self.openAISpeechModel
     }
 
     private func save() {
@@ -71,7 +96,7 @@ enum LLMService {
         }
         field("model", configuration.transcriptionModel)
         field("response_format", "verbose_json")
-        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.\(url.pathExtension)\"\r\nContent-Type: audio/mpeg\r\n\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.\(url.pathExtension)\"\r\nContent-Type: \(audioMIMEType(for: url))\r\n\r\n".data(using: .utf8)!)
         body.append(audio)
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
@@ -107,8 +132,50 @@ enum LLMService {
     }
 
     private static func validate(_ response: URLResponse, _ data: Data) throws {
-        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw NSError(domain: "LLMService", code: 1, userInfo: [NSLocalizedDescriptionKey: String(data: data, encoding: .utf8) ?? "大模型服务请求失败"])
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "LLMService", code: 1, userInfo: [NSLocalizedDescriptionKey: "大模型服务未返回有效响应。"])
+        }
+        guard 200..<300 ~= http.statusCode else {
+            throw NSError(
+                domain: "LLMService",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: serviceErrorMessage(statusCode: http.statusCode, data: data)]
+            )
+        }
+    }
+
+    private static func serviceErrorMessage(statusCode: Int, data: Data) -> String {
+        if statusCode == 401 || statusCode == 403 {
+            return "认证失败：API Key 无效，或与当前服务地址不匹配。"
+        }
+        if statusCode == 404 {
+            return "找不到语音接口：请确认服务支持 /audio/transcriptions 或 /audio/speech。"
+        }
+        if statusCode == 429 {
+            if let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let error = response["error"] as? [String: Any],
+               let code = error["code"] as? String,
+               code == "credit_balance_exhausted" {
+                return "OpenAI API 账户额度已用尽，请充值后再试。"
+            }
+            return "请求过于频繁或账户额度不足，请稍后重试。"
+        }
+        if let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let error = response["error"] as? [String: Any],
+           let message = error["message"] as? String,
+           !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "服务请求失败：\(message)"
+        }
+        return "服务请求失败（HTTP \(statusCode)），且未返回详细错误。"
+    }
+
+    private static func audioMIMEType(for url: URL) -> String {
+        switch url.pathExtension.lowercased() {
+        case "m4a": return "audio/mp4"
+        case "wav": return "audio/wav"
+        case "aac": return "audio/aac"
+        case "ogg": return "audio/ogg"
+        default: return "audio/mpeg"
         }
     }
 }

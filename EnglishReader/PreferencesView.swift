@@ -89,11 +89,15 @@ struct PreferencesView: View {
                 }
 
                 DisclosureGroup(isExpanded: $isLLMExpanded) {
-                    TextField("服务地址（例如 https://…/v1）", text: $llmConfiguration.baseURL)
+                    Button("使用 OpenAI 默认配置") {
+                        llmConfiguration.useOpenAIDefaults()
+                    }
+                    .buttonStyle(.bordered)
+                    TextField("服务地址（例如 https://api.openai.com/v1）", text: $llmConfiguration.baseURL)
                     TextField("语音转文字模型", text: $llmConfiguration.transcriptionModel)
                     TextField("文字转语音模型", text: $llmConfiguration.speechModel)
                     SecureField("API Key", text: $llmConfiguration.apiKey)
-                    Text("兼容 OpenAI 的 /audio/transcriptions 与 /audio/speech 接口。API Key 仅保存在本机钥匙串。")
+                    Text("默认使用 OpenAI 的 gpt-4o-mini-transcribe 与 gpt-4o-mini-tts。API Key 仅保存在本机钥匙串。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } label: {
