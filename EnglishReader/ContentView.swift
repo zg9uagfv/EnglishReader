@@ -25,6 +25,8 @@ struct ContentView: View {
     @State private var pendingReadingWordIndex = 0.0
     @State private var isAudioProgressVisible = true
     @State private var audioPlaybackRate = 1.0
+    @State private var audioPlaybackRateInput = "1.0"
+    @FocusState private var isAudioPlaybackRateFocused: Bool
 
     private var wordCount: Int {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
@@ -71,11 +73,9 @@ struct ContentView: View {
                 applyLiveSettings(debounced: true)
             }
             .onChange(of: audioPlaybackRate) { value in
-                let validated = min(4.0, max(0.1, value))
-                if validated != value {
-                    audioPlaybackRate = validated
-                } else {
-                    audio.setPlaybackRate(Float(validated))
+                audio.setPlaybackRate(Float(value))
+                if !isAudioPlaybackRateFocused {
+                    audioPlaybackRateInput = String(format: "%.1f", value)
                 }
             }
             .onChange(of: wordPause) { _ in
@@ -518,11 +518,19 @@ struct ContentView: View {
                 }
                 .help(isAudioProgressVisible ? "点击隐藏播放进度" : "点击显示播放进度")
 
-                TextField("倍率", value: $audioPlaybackRate, format: .number.precision(.fractionLength(0...2)))
+                TextField("倍率", text: $audioPlaybackRateInput)
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .monospacedDigit()
                     .frame(width: 58)
+                    .focused($isAudioPlaybackRateFocused)
+                    .onChange(of: audioPlaybackRateInput) { input in
+                        updateAudioPlaybackRateInput(input)
+                    }
+                    .onChange(of: isAudioPlaybackRateFocused) { isFocused in
+                        if !isFocused { commitAudioPlaybackRateInput() }
+                    }
+                    .onSubmit { commitAudioPlaybackRateInput() }
                     .accessibilityLabel("音频播放倍率，范围 0.1 到 4")
                 Text("×")
                     .fontWeight(.semibold)
@@ -614,6 +622,47 @@ struct ContentView: View {
             wordPause: wordPause,
             voiceIdentifier: selectedVoice
         )
+    }
+
+    private func updateAudioPlaybackRateInput(_ input: String) {
+        let sanitized = sanitizedAudioPlaybackRateInput(input)
+        if sanitized != input {
+            audioPlaybackRateInput = sanitized
+            return
+        }
+        guard let rate = Double(sanitized), (0.1...4.0).contains(rate) else { return }
+        audioPlaybackRate = rate
+    }
+
+    private func commitAudioPlaybackRateInput() {
+        let rate = Double(audioPlaybackRateInput) ?? audioPlaybackRate
+        audioPlaybackRate = min(4.0, max(0.1, rate))
+        audioPlaybackRateInput = String(format: "%.1f", audioPlaybackRate)
+    }
+
+    private func sanitizedAudioPlaybackRateInput(_ input: String) -> String {
+        var result = ""
+        var hasDecimalSeparator = false
+        var decimalDigitCount = 0
+
+        for character in input {
+            if character.isWholeNumber {
+                if hasDecimalSeparator {
+                    guard decimalDigitCount < 1 else { continue }
+                    result.append(character)
+                    decimalDigitCount += 1
+                } else {
+                    // The allowed range never needs more than one integer digit.
+                    guard result.isEmpty, character <= "4" else { continue }
+                    result.append(character)
+                }
+            } else if character == ".", !hasDecimalSeparator {
+                if result.isEmpty { result = "0" }
+                result.append(character)
+                hasDecimalSeparator = true
+            }
+        }
+        return result
     }
 
     private var selectedVoice: String? {
