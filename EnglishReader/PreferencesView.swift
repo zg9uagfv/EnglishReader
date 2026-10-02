@@ -44,6 +44,9 @@ struct PreferencesView: View {
                 } label: {
                     Label("TTS 发音", systemImage: "speaker.wave.2.fill")
                         .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { isTTSExpanded.toggle() }
                 }
 
                 DisclosureGroup(isExpanded: $isChildModeExpanded) {
@@ -64,6 +67,9 @@ struct PreferencesView: View {
                 } label: {
                     Label("儿童模式", systemImage: "figure.and.child.holdinghands")
                         .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { isChildModeExpanded.toggle() }
                 }
 
                 DisclosureGroup(isExpanded: $isTypographyExpanded) {
@@ -86,6 +92,9 @@ struct PreferencesView: View {
                 } label: {
                     Label("文字显示", systemImage: "textformat.size")
                         .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { isTypographyExpanded.toggle() }
                 }
 
                 DisclosureGroup(isExpanded: $isLLMExpanded) {
@@ -94,15 +103,17 @@ struct PreferencesView: View {
                     }
                     .buttonStyle(ReaderOutlinedButtonStyle())
                     TextField("服务地址（例如 https://api.openai.com/v1）", text: $llmConfiguration.baseURL)
-                    TextField("语音转文字模型", text: $llmConfiguration.transcriptionModel)
-                    TextField("文字转语音模型", text: $llmConfiguration.speechModel)
+                    TextField("通用模型", text: $llmConfiguration.model)
                     SecureField("API Key", text: $llmConfiguration.apiKey)
-                    Text("默认使用 OpenAI 的 gpt-4o-mini-transcribe 与 gpt-4o-mini-tts。API Key 仅保存在本机钥匙串。")
+                    Text("只配置一个通用大模型。具体任务由程序通过 prompt 告知模型；API Key 仅保存在本机钥匙串。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } label: {
-                    Label("大模型语音服务", systemImage: "brain.head.profile")
+                    Label("大模型服务", systemImage: "brain.head.profile")
                         .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { isLLMExpanded.toggle() }
                 }
 
                 DisclosureGroup(isExpanded: $isLocalWhisperExpanded) {
@@ -118,6 +129,9 @@ struct PreferencesView: View {
                 } label: {
                     Label("本地 Whisper", systemImage: "laptopcomputer")
                         .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { isLocalWhisperExpanded.toggle() }
             }
         }
         .formStyle(.grouped)

@@ -15,20 +15,19 @@ struct LLMTranscription: Sendable {
 @MainActor
 final class LLMConfiguration: ObservableObject {
     static let openAIBaseURL = "https://api.openai.com/v1"
-    static let openAITranscriptionModel = "gpt-4o-mini-transcribe"
-    static let openAISpeechModel = "gpt-4o-mini-tts"
+    static let openAIModel = "gpt-4o-mini"
     private static let didApplyOpenAIServiceDefaultsKey = "didApplyOpenAIServiceDefaults"
 
     @Published var baseURL: String { didSet { save() } }
-    @Published var transcriptionModel: String { didSet { save() } }
-    @Published var speechModel: String { didSet { save() } }
+    @Published var model: String { didSet { save() } }
     @Published var apiKey: String { didSet { Keychain.save(apiKey) } }
     @Published var localWhisperEnabled: Bool { didSet { save() } }
     @Published var localWhisperModel: String { didSet { save() } }
     @Published var localWhisperModelDirectory: String { didSet { save() } }
     @Published var localWhisperPythonPath: String { didSet { save() } }
 
-    var isConfigured: Bool { !baseURL.isEmpty && !transcriptionModel.isEmpty && !apiKey.isEmpty }
+    var isConfigured: Bool { !baseURL.isEmpty && !model.isEmpty && !apiKey.isEmpty }
+    var isTranslationConfigured: Bool { isConfigured }
 
     init() {
         let defaults = UserDefaults.standard
@@ -36,12 +35,11 @@ final class LLMConfiguration: ObservableObject {
         baseURL = shouldApplyOpenAIDefaults
             ? Self.openAIBaseURL
             : defaults.string(forKey: "llmBaseURL") ?? Self.openAIBaseURL
-        transcriptionModel = shouldApplyOpenAIDefaults
-            ? Self.openAITranscriptionModel
-            : defaults.string(forKey: "llmTranscriptionModel") ?? Self.openAITranscriptionModel
-        speechModel = shouldApplyOpenAIDefaults
-            ? Self.openAISpeechModel
-            : defaults.string(forKey: "llmSpeechModel") ?? Self.openAISpeechModel
+        model = shouldApplyOpenAIDefaults
+            ? Self.openAIModel
+            : defaults.string(forKey: "llmModel")
+                ?? defaults.string(forKey: "llmTranslationModel")
+                ?? Self.openAIModel
         apiKey = Keychain.load() ?? ""
         localWhisperEnabled = defaults.bool(forKey: "localWhisperEnabled")
         localWhisperModel = defaults.string(forKey: "localWhisperModel") ?? "mlx-community/whisper-large-v3-turbo"
@@ -50,22 +48,19 @@ final class LLMConfiguration: ObservableObject {
         localWhisperPythonPath = savedRuntime.isEmpty ? Self.detectLocalWhisperRuntime() : savedRuntime
         if shouldApplyOpenAIDefaults {
             defaults.set(baseURL, forKey: "llmBaseURL")
-            defaults.set(transcriptionModel, forKey: "llmTranscriptionModel")
-            defaults.set(speechModel, forKey: "llmSpeechModel")
+            defaults.set(model, forKey: "llmModel")
             defaults.set(true, forKey: Self.didApplyOpenAIServiceDefaultsKey)
         }
     }
 
     func useOpenAIDefaults() {
         baseURL = Self.openAIBaseURL
-        transcriptionModel = Self.openAITranscriptionModel
-        speechModel = Self.openAISpeechModel
+        model = Self.openAIModel
     }
 
     private func save() {
         UserDefaults.standard.set(baseURL, forKey: "llmBaseURL")
-        UserDefaults.standard.set(transcriptionModel, forKey: "llmTranscriptionModel")
-        UserDefaults.standard.set(speechModel, forKey: "llmSpeechModel")
+        UserDefaults.standard.set(model, forKey: "llmModel")
         UserDefaults.standard.set(localWhisperEnabled, forKey: "localWhisperEnabled")
         UserDefaults.standard.set(localWhisperModel, forKey: "localWhisperModel")
         UserDefaults.standard.set(localWhisperModelDirectory, forKey: "localWhisperModelDirectory")
@@ -85,41 +80,37 @@ final class LLMConfiguration: ObservableObject {
 
 @MainActor
 enum LLMService {
-    static func transcribe(url: URL, configuration: LLMConfiguration) async throws -> LLMTranscription {
-        let boundary = UUID().uuidString
-        var request = try request(path: "audio/transcriptions", configuration: configuration)
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        let audio = try Data(contentsOf: url)
-        var body = Data()
-        func field(_ name: String, _ value: String) {
-            body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".data(using: .utf8)!)
-        }
-        field("model", configuration.transcriptionModel)
-        field("response_format", "verbose_json")
-        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.\(url.pathExtension)\"\r\nContent-Type: \(audioMIMEType(for: url))\r\n\r\n".data(using: .utf8)!)
-        body.append(audio)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response, data)
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let text = json?["text"] as? String ?? ""
-        let words = (json?["words"] as? [[String: Any]] ?? []).compactMap { item -> TimedTranscriptWord? in
-            guard let word = item["word"] as? String, let start = item["start"] as? Double, let end = item["end"] as? Double else { return nil }
-            return TimedTranscriptWord(text: word, start: start, end: end)
-        }
-        return LLMTranscription(text: text, words: words)
-    }
-
-    static func synthesize(text: String, configuration: LLMConfiguration) async throws -> URL {
-        var request = try request(path: "audio/speech", configuration: configuration)
+    static func translateToChinese(_ passages: [String], configuration: LLMConfiguration) async throws -> [String] {
+        guard !passages.isEmpty else { return [] }
+        var request = try request(path: "chat/completions", configuration: configuration)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["model": configuration.speechModel, "input": text, "voice": "alloy", "response_format": "mp3"])
+        let numberedText = passages.enumerated().map { "[\($0.offset)] \($0.element)" }.joined(separator: "\n")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "model": configuration.model,
+            "temperature": 0,
+            "messages": [
+                ["role": "system", "content": "Translate each numbered English passage into natural Simplified Chinese. Return only a JSON array of translated strings, in exactly the same order and count. Do not include the numbers."],
+                ["role": "user", "content": numberedText]
+            ]
+        ])
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response, data)
-        let output = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("mp3")
-        try data.write(to: output)
-        return output
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = root["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw NSError(domain: "LLMService", code: 2, userInfo: [NSLocalizedDescriptionKey: "翻译服务未返回有效内容。"])
+        }
+        let jsonText = content
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let jsonData = jsonText.data(using: .utf8),
+              let translations = try JSONSerialization.jsonObject(with: jsonData) as? [String],
+              translations.count == passages.count else {
+            throw NSError(domain: "LLMService", code: 3, userInfo: [NSLocalizedDescriptionKey: "翻译结果与原文段落数量不一致，请重试。"])
+        }
+        return translations
     }
 
     private static func request(path: String, configuration: LLMConfiguration) throws -> URLRequest {
@@ -149,7 +140,7 @@ enum LLMService {
             return "认证失败：API Key 无效，或与当前服务地址不匹配。"
         }
         if statusCode == 404 {
-            return "找不到语音接口：请确认服务支持 /audio/transcriptions 或 /audio/speech。"
+            return "找不到大模型接口：请确认服务支持 /chat/completions。"
         }
         if statusCode == 429 {
             if let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -169,15 +160,6 @@ enum LLMService {
         return "服务请求失败（HTTP \(statusCode)），且未返回详细错误。"
     }
 
-    private static func audioMIMEType(for url: URL) -> String {
-        switch url.pathExtension.lowercased() {
-        case "m4a": return "audio/mp4"
-        case "wav": return "audio/wav"
-        case "aac": return "audio/aac"
-        case "ogg": return "audio/ogg"
-        default: return "audio/mpeg"
-        }
-    }
 }
 
 @MainActor

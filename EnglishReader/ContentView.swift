@@ -1,5 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
+#if canImport(Translation)
+import Translation
+#endif
 
 struct ContentView: View {
     @StateObject private var speech = SpeechController()
@@ -26,6 +29,14 @@ struct ContentView: View {
     @State private var isAudioProgressVisible = true
     @State private var audioPlaybackRate = 1.0
     @State private var audioPlaybackRateInput = "1.0"
+    @AppStorage("showsChineseTranslation") private var showsChineseTranslation = false
+    @State private var chineseTranslations: [Int: String] = [:]
+    @State private var isTranslating = false
+    @State private var translationStatus = ""
+    @State private var translationError: String?
+    @State private var translationTask: Task<Void, Never>?
+    @State private var appleTranslationPassages: [String] = []
+    @State private var appleTranslationRequestID = UUID()
     @FocusState private var isAudioPlaybackRateFocused: Bool
 
     private var wordCount: Int {
@@ -51,6 +62,7 @@ struct ContentView: View {
                     ReaderTheme.canvas.ignoresSafeArea()
                     VStack(spacing: 20) {
                         header
+                        translationOption
                         if isEditingText {
                             editor
                         } else {
@@ -94,6 +106,7 @@ struct ContentView: View {
                 isEditingText = false
             }
             .onChange(of: text) { updatedText in
+                scheduleTranslation(for: updatedText)
                 guard isEditingText,
                       audio.hasAudio,
                       updatedText != audioTranscriptText else { return }
@@ -101,6 +114,18 @@ struct ContentView: View {
                 // the old player here would make the play button use stale audio.
                 audio.unload()
                 speech.stop()
+            }
+            .onChange(of: showsChineseTranslation) { enabled in
+                if enabled { scheduleTranslation(for: text, immediately: true) }
+                else {
+                    translationTask?.cancel()
+                    isTranslating = false
+                    translationStatus = ""
+                    translationError = nil
+                }
+            }
+            .background {
+                appleTranslationRunner
             }
             .navigationTitle("英文文章朗读")
             .fileImporter(
@@ -270,6 +295,35 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var translationOption: some View {
+        HStack(spacing: 10) {
+            Toggle("显示中文翻译", isOn: Binding(
+                get: { showsChineseTranslation },
+                set: { enabled in
+                    showsChineseTranslation = enabled
+                    if enabled && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        text = EnglishTextFormatter.formatArticle(text)
+                        isEditingText = false
+                    }
+                }
+            ))
+            .toggleStyle(.checkbox)
+            .font(.subheadline.weight(.semibold))
+
+            Text(showsChineseTranslation ? "已开启：使用苹果本地翻译，中文显示在英文下方" : "勾选后立即在本机翻译并显示中英对照")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(ReaderTheme.primary.opacity(0.12), lineWidth: 1)
+        }
+    }
+
     private var readingView: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -301,18 +355,43 @@ struct ContentView: View {
         } else {
             VStack(alignment: .leading, spacing: max(12, fontSize * 0.65)) {
                 ForEach(formattedSentences.indices, id: \.self) { sentenceIndex in
-                    let tokens = tokens(for: formattedSentences[sentenceIndex])
+                    let sentence = formattedSentences[sentenceIndex]
+                    let tokens = tokens(for: sentence)
                     let sentenceOffset = tokenOffset(for: sentenceIndex)
-                    WrappingLayout(spacing: max(3, fontSize * 0.18)) {
-                        ForEach(tokens.indices, id: \.self) { tokenIndex in
-                            readingTokenView(
-                                tokens[tokenIndex],
-                                id: "\(sentenceIndex)-\(tokenIndex)",
-                                wordIndex: sentenceOffset + tokenIndex
-                            )
+                    VStack(alignment: .leading, spacing: 6) {
+                        WrappingLayout(spacing: max(3, fontSize * 0.18)) {
+                            ForEach(tokens.indices, id: \.self) { tokenIndex in
+                                readingTokenView(
+                                    tokens[tokenIndex],
+                                    id: "\(sentenceIndex)-\(tokenIndex)",
+                                    wordIndex: sentenceOffset + tokenIndex
+                                )
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        if showsChineseTranslation, let translation = chineseTranslations[sentenceIndex] {
+                            Text(translation)
+                                .font(.system(size: max(14, fontSize * 0.82), design: fontStyle.design))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if showsChineseTranslation && isTranslating {
+                    Label(translationStatus.isEmpty ? "正在翻译中文…" : translationStatus, systemImage: "character.book.closed")
+                        .font(.callout)
+                        .foregroundStyle(ReaderTheme.primary)
+                } else if showsChineseTranslation, let translationError {
+                    HStack(spacing: 10) {
+                        Label(translationError, systemImage: "exclamationmark.triangle")
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                        Button("重试") {
+                            scheduleTranslation(for: text, immediately: true)
+                        }
+                        .buttonStyle(ReaderOutlinedButtonStyle())
+                    }
                 }
             }
             .padding(16)
@@ -477,21 +556,6 @@ struct ContentView: View {
             }
             .buttonStyle(ReaderOutlinedButtonStyle())
             .disabled(!speech.isSpeaking)
-
-            if llmConfiguration.isConfigured {
-                Button("大模型生成音频") {
-                    Task {
-                        do {
-                            let url = try await LLMService.synthesize(text: text, configuration: llmConfiguration)
-                            audio.load(url: url, localeIdentifier: accent.languageCode, playbackRate: Float(audioPlaybackRate), shouldTranscribe: false)
-                        } catch {
-                            errorMessage = "大模型语音生成失败：\(error.localizedDescription)"
-                        }
-                    }
-                }
-                .buttonStyle(ReaderOutlinedButtonStyle())
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
 
         }
     }
@@ -673,6 +737,86 @@ struct ContentView: View {
         speech.isSpeaking ? speech.currentSpokenWordIndex : (audio.hasAudio ? audio.currentSpokenWordIndex : nil)
     }
 
+    private func scheduleTranslation(for sourceText: String, immediately: Bool = false) {
+        translationTask?.cancel()
+        guard showsChineseTranslation else { return }
+        let passages = EnglishTextFormatter.sentences(in: sourceText)
+        chineseTranslations = [:]
+        guard !passages.isEmpty else {
+            chineseTranslations = [:]
+            translationError = nil
+            isTranslating = false
+            translationStatus = ""
+            return
+        }
+        translationTask = Task { @MainActor in
+            if !immediately { try? await Task.sleep(nanoseconds: 550_000_000) }
+            guard !Task.isCancelled else { return }
+            isTranslating = true
+            translationStatus = "正在检查本地中英文语言包…"
+            translationError = nil
+            if #available(macOS 15.0, iOS 18.0, *) {
+                appleTranslationPassages = passages
+                let requestID = UUID()
+                appleTranslationRequestID = requestID
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                guard !Task.isCancelled,
+                      appleTranslationRequestID == requestID,
+                      isTranslating else { return }
+                isTranslating = false
+                translationStatus = ""
+                translationError = "本地翻译等待超时。请确认系统允许下载翻译语言包，然后重试。"
+                return
+            }
+            guard llmConfiguration.isTranslationConfigured else {
+                translationError = "苹果本地翻译需要 macOS 15 或 iOS 18；当前系统可在“大模型服务”中配置 API Key 作为回退。"
+                isTranslating = false
+                translationStatus = ""
+                return
+            }
+            do {
+                let values = try await LLMService.translateToChinese(passages, configuration: llmConfiguration)
+                guard !Task.isCancelled else { return }
+                chineseTranslations = Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.offset, $0.element) })
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                translationError = "中文翻译失败：\(error.localizedDescription)"
+            }
+            isTranslating = false
+            translationStatus = ""
+        }
+    }
+
+    @ViewBuilder
+    private var appleTranslationRunner: some View {
+#if canImport(Translation)
+        if #available(macOS 15.0, iOS 18.0, *) {
+            AppleTranslationRunner(
+                passages: appleTranslationPassages,
+                requestID: appleTranslationRequestID,
+                status: { requestID, status in
+                    guard requestID == appleTranslationRequestID, showsChineseTranslation else { return }
+                    translationStatus = status
+                },
+                completion: { requestID, result in
+                guard requestID == appleTranslationRequestID, showsChineseTranslation else { return }
+                switch result {
+                case .success(let values):
+                    chineseTranslations = Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.offset, $0.element) })
+                    translationError = nil
+                case .failure(let error):
+                    translationError = "苹果本地翻译失败：\(error.localizedDescription)"
+                }
+                isTranslating = false
+                translationStatus = ""
+            })
+            .frame(width: 0, height: 0)
+        }
+#endif
+    }
+
     private func importFile(_ result: Result<[URL], Error>) {
         do {
             guard let url = try result.get().first else { return }
@@ -686,14 +830,11 @@ struct ContentView: View {
             if contentType?.conforms(to: .audio) == true {
                 let configuration = llmConfiguration
                 let usesLocalWhisper = configuration.localWhisperEnabled
-                let usesRemoteWhisper = !usesLocalWhisper && configuration.isConfigured
                 audio.load(
                     url: url,
                     localeIdentifier: accent.languageCode,
                     playbackRate: Float(audioPlaybackRate),
-                    // A chosen Whisper service owns the transcript lifecycle, so
-                    // playback only becomes available after it has completed.
-                    shouldTranscribe: !usesLocalWhisper && !usesRemoteWhisper
+                    shouldTranscribe: !usesLocalWhisper
                 )
                 speech.stop()
                 if usesLocalWhisper {
@@ -704,16 +845,6 @@ struct ContentView: View {
                         } catch {
                             audio.finishTranscription(status: "本地 Whisper 转写失败")
                             errorMessage = "本地 Whisper 转写失败：\(transcriptionErrorMessage(error))"
-                        }
-                    }
-                } else if usesRemoteWhisper {
-                    audio.beginTranscription(status: "正在使用大模型转写音频…")
-                    Task {
-                        do {
-                            audio.apply(transcription: try await LLMService.transcribe(url: url, configuration: configuration))
-                        } catch {
-                            audio.startSystemTranscription(url: url, localeIdentifier: accent.languageCode)
-                            errorMessage = "大模型转写失败，已回退系统识别：\(transcriptionErrorMessage(error))"
                         }
                     }
                 }
@@ -751,6 +882,52 @@ struct ContentView: View {
         return message.isEmpty ? "服务未返回详细错误，请检查 API 地址、模型名和 API Key。" : message
     }
 }
+
+#if canImport(Translation)
+@available(macOS 15.0, iOS 18.0, *)
+private struct AppleTranslationRunner: View {
+    let passages: [String]
+    let requestID: UUID
+    let status: (UUID, String) -> Void
+    let completion: (UUID, Result<[String], Error>) -> Void
+    @State private var configuration: TranslationSession.Configuration?
+
+    var body: some View {
+        Color.clear
+            .task(id: requestID) {
+                guard !passages.isEmpty else { return }
+                status(requestID, "正在准备本地翻译语言包…")
+                if configuration == nil {
+                    configuration = TranslationSession.Configuration(
+                        source: Locale.Language(identifier: "en"),
+                        target: Locale.Language(identifier: "zh-Hans")
+                    )
+                } else {
+                    configuration?.invalidate()
+                }
+            }
+            .translationTask(configuration) { session in
+                let activeRequestID = requestID
+                do {
+                    status(activeRequestID, "正在检查并下载所需语言包…")
+                    try await session.prepareTranslation()
+                    guard !Task.isCancelled else { return }
+                    status(activeRequestID, "语言包已就绪，正在翻译中文…")
+                    let requests = passages.enumerated().map {
+                        TranslationSession.Request(sourceText: $0.element, clientIdentifier: String($0.offset))
+                    }
+                    let responses = try await session.translations(from: requests)
+                    let ordered = responses.sorted {
+                        Int($0.clientIdentifier ?? "0") ?? 0 < Int($1.clientIdentifier ?? "0") ?? 0
+                    }
+                    completion(activeRequestID, .success(ordered.map(\.targetText)))
+                } catch {
+                    completion(activeRequestID, .failure(error))
+                }
+            }
+    }
+}
+#endif
 
 private enum ReaderTheme {
     static let primary = Color(red: 0.29, green: 0.37, blue: 0.90)
