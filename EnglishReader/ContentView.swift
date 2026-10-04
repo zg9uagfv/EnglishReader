@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var text = ""
     @State private var accent: EnglishAccent = .american
     @State private var speed = 0.45
+    @AppStorage("ttsEngine") private var ttsEngine: TTSEngine = .kokoro
     @State private var settingsUpdateTask: Task<Void, Never>?
     @State private var childMode = false
     @State private var wordPause = 1.0
@@ -50,6 +51,7 @@ struct ContentView: View {
                 accent: $accent,
                 selectedVoiceIdentifier: $selectedVoiceIdentifier,
                 speed: $speed,
+                ttsEngine: $ttsEngine,
                 childMode: $childMode,
                 wordPause: $wordPause,
                 fontStyle: $fontStyle,
@@ -84,6 +86,10 @@ struct ContentView: View {
             .onChange(of: speed) { _ in
                 applyLiveSettings(debounced: true)
             }
+            .onChange(of: ttsEngine) { engine in
+                if engine == .kokoro { childMode = false }
+                speech.stop()
+            }
             .onChange(of: audioPlaybackRate) { value in
                 audio.setPlaybackRate(Float(value))
                 if !isAudioPlaybackRateFocused {
@@ -96,6 +102,15 @@ struct ContentView: View {
             .onChange(of: childMode) { enabled in
                 if enabled && audio.isPlaying {
                     audio.pause()
+                }
+            }
+            .onChange(of: speech.isSpeaking) { isSpeaking in
+                // Both system TTS and Kokoro clear their active word when the
+                // final buffer/utterance completes. Reset the slider's stored
+                // position too, so a finished article visibly returns home.
+                if !isSpeaking {
+                    isScrubbingReadingProgress = false
+                    pendingReadingWordIndex = 0
                 }
             }
             .onChange(of: audio.transcriptionText) { transcription in
@@ -438,7 +453,7 @@ struct ContentView: View {
             )
             .popover(item: wordSelectionBinding(for: id), arrowEdge: .bottom) { selection in
                 WordDetailView(word: selection.word, accent: accent) {
-                    speech.speakWord(selection.word, accent: accent, voiceIdentifier: selectedVoice)
+                    speech.speakWord(selection.word, accent: accent, engine: ttsEngine, voiceIdentifier: selectedVoice)
                 }
             }
             .help(word == nil ? "" : "双击查看音标和词义，单击高亮")
@@ -655,6 +670,7 @@ struct ContentView: View {
             speech.updatePlaybackSettings(
                 accent: accent,
                 speed: speed,
+                engine: ttsEngine,
                 wordPause: wordPause,
                 voiceIdentifier: selectedVoice
             )
@@ -669,6 +685,7 @@ struct ContentView: View {
                 text,
                 accent: accent,
                 speed: speed,
+                engine: ttsEngine,
                 childMode: childMode,
                 wordPause: wordPause,
                 voiceIdentifier: selectedVoice
@@ -682,6 +699,7 @@ struct ContentView: View {
             in: text,
             accent: accent,
             speed: speed,
+            engine: ttsEngine,
             childMode: childMode,
             wordPause: wordPause,
             voiceIdentifier: selectedVoice
@@ -734,7 +752,8 @@ struct ContentView: View {
     }
 
     private var activeSpokenWordIndex: Int? {
-        speech.isSpeaking ? speech.currentSpokenWordIndex : (audio.hasAudio ? audio.currentSpokenWordIndex : nil)
+        if speech.isSpeaking { return speech.currentSpokenWordIndex }
+        return audio.hasAudio ? audio.currentSpokenWordIndex : nil
     }
 
     private func scheduleTranslation(for sourceText: String, immediately: Bool = false) {

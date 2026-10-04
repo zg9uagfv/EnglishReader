@@ -17,6 +17,9 @@
 		A10000000000000000000009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* PreferencesView.swift */; };
 		A1000000000000000000000A /* AudioPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* AudioPlaybackController.swift */; };
 		A1000000000000000000000B /* LLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* LLMService.swift */; };
+		A1000000000000000000000C /* KokoroSpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* KokoroSpeechEngine.swift */; };
+		A1000000000000000000000D /* KokoroSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* KokoroSwift */; };
+		A1000000000000000000000E /* MLXUtilsLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* MLXUtilsLibrary */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,13 +35,17 @@
 		A2000000000000000000000A /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000B /* AudioPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackController.swift; sourceTree = "<group>"; };
 		A2000000000000000000000C /* LLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMService.swift; sourceTree = "<group>"; };
+		A2000000000000000000000D /* KokoroSpeechEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroSpeechEngine.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A30000000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+				A1000000000000000000000D /* KokoroSwift in Frameworks */,
+				A1000000000000000000000E /* MLXUtilsLibrary in Frameworks */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -66,6 +73,7 @@
 				A2000000000000000000000A /* PreferencesView.swift */,
 				A2000000000000000000000B /* AudioPlaybackController.swift */,
 				A2000000000000000000000C /* LLMService.swift */,
+				A2000000000000000000000D /* KokoroSpeechEngine.swift */,
 			);
 			path = EnglishReader;
 			sourceTree = "<group>";
@@ -90,6 +98,10 @@
 			buildRules = ();
 			dependencies = ();
 			name = EnglishReader;
+			packageProductDependencies = (
+				A90000000000000000000001 /* KokoroSwift */,
+				A90000000000000000000002 /* MLXUtilsLibrary */,
+			);
 			productName = EnglishReader;
 			productReference = A20000000000000000000005 /* EnglishReader.app */;
 			productType = "com.apple.product-type.application";
@@ -114,6 +126,10 @@
 			productRefGroup = A40000000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
+			packageReferences = (
+				A80000000000000000000005 /* XCRemoteSwiftPackageReference "kokoro-ios" */,
+				A80000000000000000000006 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */,
+			);
 			targets = (A50000000000000000000001 /* EnglishReader */);
 		};
 /* End PBXProject section */
@@ -142,10 +158,43 @@
 				A10000000000000000000009 /* PreferencesView.swift in Sources */,
 				A1000000000000000000000A /* AudioPlaybackController.swift in Sources */,
 				A1000000000000000000000B /* LLMService.swift in Sources */,
+				A1000000000000000000000C /* KokoroSpeechEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A80000000000000000000005 /* XCRemoteSwiftPackageReference "kokoro-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mlalma/kokoro-ios.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.11;
+			};
+		};
+		A80000000000000000000006 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mlalma/MLXUtilsLibrary.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.0.6;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A90000000000000000000001 /* KokoroSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A80000000000000000000005 /* XCRemoteSwiftPackageReference "kokoro-ios" */;
+			productName = KokoroSwift;
+		};
+		A90000000000000000000002 /* MLXUtilsLibrary */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A80000000000000000000006 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */;
+			productName = MLXUtilsLibrary;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A80000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
@@ -161,8 +210,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "英文文章朗读";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于将上传的英语音频转换为可同步阅读的文本。";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.EnglishReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -184,8 +233,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "英文文章朗读";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于将上传的英语音频转换为可同步阅读的文本。";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.EnglishReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";

@@ -15,6 +15,20 @@ enum EnglishAccent: String, CaseIterable, Identifiable {
     }
 }
 
+enum TTSEngine: String, CaseIterable, Identifiable {
+    case system
+    case kokoro
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .system: return "系统语音"
+        case .kokoro: return "Kokoro 本地语音"
+        }
+    }
+}
+
 struct EnglishVoiceOption: Identifiable, Hashable {
     let identifier: String
     let name: String
@@ -64,6 +78,8 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     private var selectedVoiceIdentifier: String?
     private var wordAudioPlayer: AVPlayer?
     private var wordAudioTask: Task<Void, Never>?
+    private let kokoro = KokoroSpeechEngine()
+    private var kokoroRequestID = UUID()
 
     override init() {
         super.init()
@@ -74,6 +90,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         _ text: String,
         accent: EnglishAccent,
         speed: Double,
+        engine: TTSEngine,
         childMode: Bool = false,
         wordPause: Double = 1.0,
         voiceIdentifier: String? = nil
@@ -90,7 +107,9 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
 
-        if childMode {
+        if engine == .kokoro, kokoro.isInstalled {
+            startKokoroSpeech(content, accent: accent, speed: speed, baseWordIndex: 0)
+        } else if childMode {
             childWords = content.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).map(String.init)
             nextChildWordIndex = 0
             childWordPause = wordPause
@@ -103,9 +122,20 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         }
     }
 
-    func updatePlaybackSettings(accent: EnglishAccent, speed: Double, wordPause: Double, voiceIdentifier: String?) {
+    func updatePlaybackSettings(accent: EnglishAccent, speed: Double, engine: TTSEngine, wordPause: Double, voiceIdentifier: String?) {
         guard isSpeaking else { return }
         selectedVoiceIdentifier = voiceIdentifier
+        // Kokoro may still be generating when the user moves the speed slider;
+        // it is not yet `isPlaying` in that state. The selected engine, rather
+        // than player state, determines which synthesis path restarts.
+        if engine == .kokoro, isNormalSequenceActive {
+            let words = normalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).map(String.init)
+            let baseWordIndex = currentSpokenWordIndex ?? normalBaseWordIndex
+            let relativeIndex = min(max(0, baseWordIndex - normalBaseWordIndex), max(0, words.count - 1))
+            let remaining = words[relativeIndex...].joined(separator: " ")
+            startKokoroSpeech(remaining, accent: accent, speed: speed, baseWordIndex: baseWordIndex)
+            return
+        }
 
         if isChildSequenceActive {
             childAccent = accent
@@ -133,7 +163,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         }
     }
 
-    func speakWord(_ word: String, accent: EnglishAccent, voiceIdentifier: String? = nil) {
+    func speakWord(_ word: String, accent: EnglishAccent, engine: TTSEngine, voiceIdentifier: String? = nil) {
         resetChildSequence()
         isNormalSequenceActive = false
         wordAudioTask?.cancel()
@@ -144,6 +174,10 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         isPaused = false
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
+        if engine == .kokoro, kokoro.isInstalled {
+            startKokoroSpeech(word, accent: accent, speed: 0.42, baseWordIndex: 0)
+            return
+        }
         let utterance = makeChildUtterance(
             word,
             followingWord: nil,
@@ -155,7 +189,13 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     }
 
     func togglePause() {
-        if synthesizer.isPaused {
+        if kokoro.isPlaying {
+            kokoro.pause()
+            isPaused = true
+        } else if kokoro.isPaused {
+            kokoro.resume()
+            isPaused = false
+        } else if synthesizer.isPaused {
             if synthesizer.continueSpeaking() {
                 isPaused = false
             }
@@ -180,6 +220,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         in text: String,
         accent: EnglishAccent,
         speed: Double,
+        engine: TTSEngine,
         childMode: Bool,
         wordPause: Double,
         voiceIdentifier: String?
@@ -200,7 +241,9 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         currentSpokenWordIndex = index
         selectedVoiceIdentifier = voiceIdentifier
 
-        if childMode {
+        if engine == .kokoro, kokoro.isInstalled {
+            startKokoroSpeech(words[index...].joined(separator: " "), accent: accent, speed: speed, baseWordIndex: index)
+        } else if childMode {
             childWords = words
             nextChildWordIndex = index
             childWordPause = wordPause
@@ -214,6 +257,8 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     }
 
     func stop() {
+        kokoroRequestID = UUID()
+        kokoro.stop()
         wordAudioTask?.cancel()
         wordAudioPlayer?.pause()
         resetChildSequence()
@@ -328,6 +373,9 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         speed: Double,
         baseWordIndex: Int
     ) {
+        // Keep the two engines mutually exclusive, including when Kokoro
+        // synthesis falls back to the system voice.
+        kokoro.stop()
         normalText = text
         normalWordOffset = 0
         normalBaseWordIndex = baseWordIndex
@@ -336,6 +384,57 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         utterance.preUtteranceDelay = 0.05
         activeUtterances.insert(ObjectIdentifier(utterance))
         synthesizer.speak(utterance)
+    }
+
+    private func startKokoroSpeech(
+        _ text: String,
+        accent: EnglishAccent,
+        speed: Double,
+        baseWordIndex: Int
+    ) {
+        // A settings update can restart synthesis while a system utterance is
+        // still draining. Stop it before scheduling Kokoro audio.
+        activeUtterances.removeAll()
+        synthesizer.stopSpeaking(at: .immediate)
+        normalText = text
+        normalWordOffset = 0
+        normalBaseWordIndex = baseWordIndex
+        isNormalSequenceActive = true
+        currentSpokenWordIndex = baseWordIndex
+        let requestID = UUID()
+        kokoroRequestID = requestID
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.kokoro.speak(
+                    text: text,
+                    accent: accent,
+                    speed: speed,
+                    didSpeakWord: { [weak self] wordOffset in
+                        DispatchQueue.main.async {
+                            guard let self, self.kokoroRequestID == requestID else { return }
+                            self.currentSpokenWordIndex = baseWordIndex + wordOffset
+                        }
+                    },
+                    didFinish: { [weak self] in
+                        guard let self, self.kokoroRequestID == requestID else { return }
+                        self.isNormalSequenceActive = false
+                        self.isSpeaking = false
+                        self.isPaused = false
+                        self.currentSpokenWordIndex = nil
+                    }
+                )
+            } catch {
+                guard self.kokoroRequestID == requestID else { return }
+                // A cancelled or superseded request must not introduce a
+                // system-voice fallback alongside the replacement Kokoro task.
+                guard case KokoroSpeechError.cancelled = error else {
+                    self.startNormalSpeech(text, accent: accent, speed: speed, baseWordIndex: baseWordIndex)
+                    return
+                }
+                return
+            }
+        }
     }
 
     private func makeChildUtterance(
