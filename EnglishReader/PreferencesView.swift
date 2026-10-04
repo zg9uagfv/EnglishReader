@@ -61,7 +61,28 @@ struct PreferencesView: View {
                             .font(.headline)
                         TextField("模型文件（留空使用默认位置）", text: $kokoroModelFile)
                         TextField("音色文件（留空使用默认位置）", text: $kokoroVoiceFile)
-                        TextField("Kokoro 音色名", text: $kokoroVoiceName)
+                        Picker("Kokoro 音色", selection: $kokoroVoiceName) {
+                            Section("美式女声") {
+                                ForEach(KokoroVoiceOption.americanFemale) { voice in
+                                    Text(voice.displayName).tag(voice.identifier)
+                                }
+                            }
+                            Section("美式男声") {
+                                ForEach(KokoroVoiceOption.americanMale) { voice in
+                                    Text(voice.displayName).tag(voice.identifier)
+                                }
+                            }
+                            Section("英式女声") {
+                                ForEach(KokoroVoiceOption.britishFemale) { voice in
+                                    Text(voice.displayName).tag(voice.identifier)
+                                }
+                            }
+                            Section("英式男声") {
+                                ForEach(KokoroVoiceOption.britishMale) { voice in
+                                    Text(voice.displayName).tag(voice.identifier)
+                                }
+                            }
+                        }
                         Text("模型不可用时自动回退系统声音。默认目录：Application Support/EnglishReader/Kokoro。")
                             .font(.callout)
                             .foregroundStyle(.secondary)

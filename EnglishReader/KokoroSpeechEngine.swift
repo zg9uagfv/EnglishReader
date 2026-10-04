@@ -4,6 +4,24 @@ import KokoroSwift
 import MLXUtilsLibrary
 import SwiftUI
 
+struct KokoroVoiceOption: Identifiable {
+    let identifier: String
+    let displayName: String
+
+    var id: String { identifier }
+
+    static let americanFemale = make("af", "美式女声", ["alloy", "aoede", "bella", "heart", "jessica", "kore", "nicole", "nova", "river", "sarah", "sky"])
+    static let americanMale = make("am", "美式男声", ["adam", "echo", "eric", "fenrir", "liam", "michael", "onyx", "puck", "santa"])
+    static let britishFemale = make("bf", "英式女声", ["alice", "emma", "isabella", "lily"])
+    static let britishMale = make("bm", "英式男声", ["daniel", "fable", "george", "lewis"])
+
+    private static func make(_ prefix: String, _ group: String, _ names: [String]) -> [KokoroVoiceOption] {
+        names.map { name in
+            KokoroVoiceOption(identifier: "\(prefix)_\(name)", displayName: "\(group) · \(name.capitalized)")
+        }
+    }
+}
+
 /// On-device Kokoro synthesis. Model files are intentionally kept outside the
 /// app bundle so the 300+ MB model is not checked into the project.
 final class KokoroSpeechEngine {
