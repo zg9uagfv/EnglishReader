@@ -20,6 +20,7 @@
 		A1000000000000000000000C /* KokoroSpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* KokoroSpeechEngine.swift */; };
 		A1000000000000000000000D /* KokoroSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* KokoroSwift */; };
 		A1000000000000000000000E /* MLXUtilsLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* MLXUtilsLibrary */; };
+		A1000000000000000000000F /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +50,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A30000000000000000000004 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				A1000000000000000000000F /* KokoroSwift in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXGroup section */
 		A40000000000000000000001 = {
@@ -93,6 +108,7 @@
 			buildPhases = (
 				A30000000000000000000002 /* Sources */,
 				A30000000000000000000001 /* Frameworks */,
+				A30000000000000000000004 /* Embed Frameworks */,
 				A30000000000000000000003 /* Resources */,
 			);
 			buildRules = ();
@@ -211,6 +227,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "英文文章朗读";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于将上传的英语音频转换为可同步阅读的文本。";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.EnglishReader;
@@ -234,6 +251,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "英文文章朗读";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于将上传的英语音频转换为可同步阅读的文本。";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.EnglishReader;

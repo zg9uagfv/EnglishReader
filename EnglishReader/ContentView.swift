@@ -87,8 +87,10 @@ struct ContentView: View {
                 applyLiveSettings(debounced: true)
             }
             .onChange(of: ttsEngine) { engine in
-                if engine == .kokoro { childMode = false }
                 speech.stop()
+                if engine == .kokoro {
+                    childMode = false
+                }
             }
             .onChange(of: audioPlaybackRate) { value in
                 audio.setPlaybackRate(Float(value))

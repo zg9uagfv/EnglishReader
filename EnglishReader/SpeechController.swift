@@ -107,9 +107,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
 
-        if engine == .kokoro, kokoro.isInstalled {
-            startKokoroSpeech(content, accent: accent, speed: speed, baseWordIndex: 0)
-        } else if childMode {
+        if childMode && engine == .system {
             childWords = content.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).map(String.init)
             nextChildWordIndex = 0
             childWordPause = wordPause
@@ -117,6 +115,8 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             childSpeed = speed
             isChildSequenceActive = true
             speakNextChildWord()
+        } else if engine == .kokoro, kokoro.isInstalled {
+            startKokoroSpeech(content, accent: accent, speed: speed, baseWordIndex: 0)
         } else {
             startNormalSpeech(content, accent: accent, speed: speed, baseWordIndex: 0)
         }

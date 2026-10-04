@@ -51,7 +51,7 @@ struct PreferencesView: View {
                             Text(speedLabel).monospacedDigit().frame(width: 96, alignment: .trailing)
                         }
                     }
-                    Text(ttsEngine == .kokoro ? "Kokoro 不支持逐词进度与儿童逐词模式。" : "点词与文章朗读使用所选系统声音。")
+                    Text(ttsEngine == .kokoro ? "Kokoro 仅支持文章与点词朗读；儿童模式仅适用于系统声音。" : "点词与文章朗读使用所选系统声音。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
