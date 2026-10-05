@@ -4,6 +4,10 @@
 build/
 DerivedData/
 
+# Local Kokoro runtime assets (bundled only in distribution builds)
+EnglishReader/Resources/Kokoro/*.safetensors
+EnglishReader/Resources/Kokoro/*.npz
+
 # Xcode user-specific data
 xcuserdata/
 *.xcuserstate
@@ -13,4 +17,3 @@ xcuserdata/
 # Swift Package Manager
 .build/
 .swiftpm/
-

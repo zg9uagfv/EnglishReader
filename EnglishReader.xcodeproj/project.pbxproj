@@ -21,6 +21,8 @@
 		A1000000000000000000000D /* KokoroSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* KokoroSwift */; };
 		A1000000000000000000000E /* MLXUtilsLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* MLXUtilsLibrary */; };
 		A1000000000000000000000F /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A10000000000000000000010 /* kokoro-v1_0.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* kokoro-v1_0.safetensors */; };
+		A10000000000000000000011 /* voices.npz in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* voices.npz */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +39,8 @@
 		A2000000000000000000000B /* AudioPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackController.swift; sourceTree = "<group>"; };
 		A2000000000000000000000C /* LLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMService.swift; sourceTree = "<group>"; };
 		A2000000000000000000000D /* KokoroSpeechEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroSpeechEngine.swift; sourceTree = "<group>"; };
+		A2000000000000000000000E /* kokoro-v1_0.safetensors */ = {isa = PBXFileReference; lastKnownFileType = file; path = Resources/Kokoro/kokoro-v1_0.safetensors; sourceTree = "<group>"; };
+		A2000000000000000000000F /* voices.npz */ = {isa = PBXFileReference; lastKnownFileType = file; path = Resources/Kokoro/voices.npz; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +93,8 @@
 				A2000000000000000000000B /* AudioPlaybackController.swift */,
 				A2000000000000000000000C /* LLMService.swift */,
 				A2000000000000000000000D /* KokoroSpeechEngine.swift */,
+				A2000000000000000000000E /* kokoro-v1_0.safetensors */,
+				A2000000000000000000000F /* voices.npz */,
 			);
 			path = EnglishReader;
 			sourceTree = "<group>";
@@ -154,7 +160,11 @@
 		A30000000000000000000003 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A10000000000000000000004 /* Assets.xcassets in Resources */);
+			files = (
+				A10000000000000000000004 /* Assets.xcassets in Resources */,
+				A10000000000000000000010 /* kokoro-v1_0.safetensors in Resources */,
+				A10000000000000000000011 /* voices.npz in Resources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */

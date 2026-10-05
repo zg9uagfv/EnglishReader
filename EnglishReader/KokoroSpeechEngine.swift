@@ -193,16 +193,32 @@ final class KokoroSpeechEngine {
     }
 
     private func resourcePaths() -> (modelFile: URL, voiceFile: URL, voiceName: String)? {
-        let model = configuredModelFile.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? Self.defaultDirectory.appendingPathComponent("kokoro-v1_0.safetensors")
-            : URL(fileURLWithPath: configuredModelFile)
-        let voice = configuredVoiceFile.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? Self.defaultDirectory.appendingPathComponent("voices.npz")
-            : URL(fileURLWithPath: configuredVoiceFile)
         let voiceName = configuredVoiceName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard FileManager.default.fileExists(atPath: model.path),
-              FileManager.default.fileExists(atPath: voice.path) else { return nil }
-        return (model, voice, voiceName.isEmpty ? "af_heart" : voiceName)
+        let resolvedVoiceName = voiceName.isEmpty ? "af_heart" : voiceName
+        let modelSetting = configuredModelFile.trimmingCharacters(in: .whitespacesAndNewlines)
+        let voiceSetting = configuredVoiceFile.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !modelSetting.isEmpty || !voiceSetting.isEmpty {
+            guard !modelSetting.isEmpty, !voiceSetting.isEmpty else { return nil }
+            let model = URL(fileURLWithPath: modelSetting)
+            let voice = URL(fileURLWithPath: voiceSetting)
+            guard FileManager.default.fileExists(atPath: model.path),
+                  FileManager.default.fileExists(atPath: voice.path) else { return nil }
+            return (model, voice, resolvedVoiceName)
+        }
+
+        let downloadedModel = Self.defaultDirectory.appendingPathComponent("kokoro-v1_0.safetensors")
+        let downloadedVoice = Self.defaultDirectory.appendingPathComponent("voices.npz")
+        if FileManager.default.fileExists(atPath: downloadedModel.path),
+           FileManager.default.fileExists(atPath: downloadedVoice.path) {
+            return (downloadedModel, downloadedVoice, resolvedVoiceName)
+        }
+
+        guard let bundledModel = Bundle.main.url(forResource: "kokoro-v1_0", withExtension: "safetensors"),
+              let bundledVoice = Bundle.main.url(forResource: "voices", withExtension: "npz") else {
+            return nil
+        }
+        return (bundledModel, bundledVoice, resolvedVoiceName)
     }
 }
 
