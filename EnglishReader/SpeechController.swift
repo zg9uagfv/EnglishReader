@@ -58,6 +58,10 @@ struct EnglishVoiceOption: Identifiable, Hashable {
 }
 
 final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+    private static let pronounIPattern = try! NSRegularExpression(
+        pattern: #"(?<![\p{L}\p{N}])I(?![\p{L}\p{N}'’])"#
+    )
+
     @Published private(set) var isSpeaking = false
     @Published private(set) var isPaused = false
     @Published private(set) var currentSpokenWordIndex: Int?
@@ -300,7 +304,15 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     }
 
     private func makeUtterance(_ text: String, accent: EnglishAccent, speed: Double) -> AVSpeechUtterance {
-        let utterance = AVSpeechUtterance(string: text)
+        // Some system voices announce a standalone uppercase "I" as "capital I".
+        // Annotate the pronoun in place so speech delegate ranges still match
+        // the article text used for highlighting and seeking.
+        let attributed = NSMutableAttributedString(string: text)
+        let ipaKey = NSAttributedString.Key(rawValue: AVSpeechSynthesisIPANotationAttribute)
+        for match in Self.pronounIPattern.matches(in: text, range: NSRange(location: 0, length: attributed.length)) {
+            attributed.addAttribute(ipaKey, value: "aɪ", range: match.range)
+        }
+        let utterance = AVSpeechUtterance(attributedString: attributed)
         if let selectedVoiceIdentifier,
            let selected = AVSpeechSynthesisVoice(identifier: selectedVoiceIdentifier),
            selected.language == accent.languageCode {

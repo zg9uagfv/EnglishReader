@@ -517,31 +517,32 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            Slider(
-                value: Binding(
-                    get: {
-                        if isScrubbingReadingProgress { return pendingReadingWordIndex }
-                        if speech.isSpeaking {
-                            return Double(min(maximumWordIndex, activeSpokenWordIndex ?? 0))
+            if wordCount > 1 {
+                Slider(
+                    value: Binding(
+                        get: {
+                            if isScrubbingReadingProgress { return pendingReadingWordIndex }
+                            if speech.isSpeaking {
+                                return Double(min(maximumWordIndex, activeSpokenWordIndex ?? 0))
+                            }
+                            return min(Double(maximumWordIndex), pendingReadingWordIndex)
+                        },
+                        set: { pendingReadingWordIndex = $0 }
+                    ),
+                    in: 0...Double(maximumWordIndex),
+                    step: 1,
+                    onEditingChanged: { isEditing in
+                        isScrubbingReadingProgress = isEditing
+                        if isEditing {
+                            pendingReadingWordIndex = Double(min(maximumWordIndex, activeSpokenWordIndex ?? 0))
+                        } else if speech.isSpeaking {
+                            seekTextReading(to: Int(pendingReadingWordIndex.rounded()))
                         }
-                        return min(Double(maximumWordIndex), pendingReadingWordIndex)
-                    },
-                    set: { pendingReadingWordIndex = $0 }
-                ),
-                in: 0...Double(maximumWordIndex),
-                step: 1,
-                onEditingChanged: { isEditing in
-                    isScrubbingReadingProgress = isEditing
-                    if isEditing {
-                        pendingReadingWordIndex = Double(min(maximumWordIndex, activeSpokenWordIndex ?? 0))
-                    } else if speech.isSpeaking {
-                        seekTextReading(to: Int(pendingReadingWordIndex.rounded()))
                     }
-                }
-            )
-            .tint(.accentColor)
-            .disabled(wordCount < 2)
-            .accessibilityValue("已定位到第 \(completedWords) 个词，共 \(wordCount) 个单词；拖动后从目标位置开始或继续朗读")
+                )
+                .tint(.accentColor)
+                .accessibilityValue("已定位到第 \(completedWords) 个词，共 \(wordCount) 个单词；拖动后从目标位置开始或继续朗读")
+            }
         }
         .padding(14)
         .background(ReaderTheme.sunshine.opacity(0.20), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
