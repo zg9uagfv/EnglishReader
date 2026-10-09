@@ -5,7 +5,6 @@ struct PreferencesView: View {
     @Binding var accent: EnglishAccent
     @Binding var selectedVoiceIdentifier: String
     @Binding var speed: Double
-    @Binding var ttsEngine: TTSEngine
     @Binding var childMode: Bool
     @Binding var wordPause: Double
     @Binding var fontStyle: DisplayFontStyle
@@ -15,19 +14,13 @@ struct PreferencesView: View {
     @State private var isTypographyExpanded = false
     @State private var isLLMExpanded = false
     @State private var isLocalWhisperExpanded = false
-    @AppStorage("kokoroModelFile") private var kokoroModelFile = ""
-    @AppStorage("kokoroVoiceFile") private var kokoroVoiceFile = ""
-    @AppStorage("kokoroVoiceName") private var kokoroVoiceName = "af_heart"
 
     var body: some View {
         Form {
                 DisclosureGroup(isExpanded: $isTTSExpanded) {
-                    Picker("朗读引擎", selection: $ttsEngine) {
-                        ForEach(TTSEngine.allCases) { engine in
-                            Text(engine.displayName).tag(engine)
-                        }
+                    LabeledContent("朗读引擎") {
+                        Text("系统语音")
                     }
-                    .pickerStyle(.segmented)
 
                     Picker("英语口音", selection: $accent) {
                         ForEach(EnglishAccent.allCases) { item in
@@ -36,13 +29,27 @@ struct PreferencesView: View {
                     }
                     .pickerStyle(.segmented)
 
-                    if ttsEngine == .system {
-                        Picker("系统声音", selection: $selectedVoiceIdentifier) {
-                            Text("自动选择高品质").tag("")
-                            ForEach(EnglishVoiceOption.available(for: accent)) { voice in
-                                Text(voice.displayName).tag(voice.identifier)
-                            }
+                    Picker("系统声音", selection: $selectedVoiceIdentifier) {
+                        Text("自动选择高品质").tag("")
+                        ForEach(EnglishVoiceOption.available(for: accent)) { voice in
+                            Text(voice.displayName).tag(voice.identifier)
                         }
+                    }
+
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Label(
+                                hasHighQualityVoice
+                                    ? "可在系统设置中下载更多 Enhanced 或 Premium 英语声音。"
+                                    : "尚未安装 Enhanced 或 Premium 英语声音。",
+                                systemImage: hasHighQualityVoice ? "speaker.wave.2" : "arrow.down.circle"
+                            )
+                            .font(.subheadline.weight(.medium))
+                            Text("前往“系统设置 → 辅助功能 → 朗读内容 → 系统声音 → 管理声音”，下载 English (US) 或 English (UK) 的 Enhanced / Premium 声音。下载完成后重新打开本应用。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     LabeledContent("语速") {
@@ -51,42 +58,9 @@ struct PreferencesView: View {
                             Text(speedLabel).monospacedDigit().frame(width: 96, alignment: .trailing)
                         }
                     }
-                    Text(ttsEngine == .kokoro ? "Kokoro 仅支持文章与点词朗读；儿童模式仅适用于系统声音。" : "点词与文章朗读使用所选系统声音。")
+                    Text("点词与文章朗读使用所选系统声音。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-
-                    if ttsEngine == .kokoro {
-                        Divider()
-                        Text("Kokoro 本地语音")
-                            .font(.headline)
-                        TextField("模型文件（留空使用默认位置）", text: $kokoroModelFile)
-                        TextField("音色文件（留空使用默认位置）", text: $kokoroVoiceFile)
-                        Picker("Kokoro 音色", selection: $kokoroVoiceName) {
-                            Section("美式女声") {
-                                ForEach(KokoroVoiceOption.americanFemale) { voice in
-                                    Text(voice.displayName).tag(voice.identifier)
-                                }
-                            }
-                            Section("美式男声") {
-                                ForEach(KokoroVoiceOption.americanMale) { voice in
-                                    Text(voice.displayName).tag(voice.identifier)
-                                }
-                            }
-                            Section("英式女声") {
-                                ForEach(KokoroVoiceOption.britishFemale) { voice in
-                                    Text(voice.displayName).tag(voice.identifier)
-                                }
-                            }
-                            Section("英式男声") {
-                                ForEach(KokoroVoiceOption.britishMale) { voice in
-                                    Text(voice.displayName).tag(voice.identifier)
-                                }
-                            }
-                        }
-                        Text("模型不可用时自动回退系统声音。默认目录：Application Support/EnglishReader/Kokoro。")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
                 } label: {
                     Label("TTS 发音", systemImage: "speaker.wave.2.fill")
                         .font(.body.weight(.semibold))
@@ -95,8 +69,7 @@ struct PreferencesView: View {
                         .onTapGesture { isTTSExpanded.toggle() }
                 }
 
-                if ttsEngine == .system {
-                    DisclosureGroup(isExpanded: $isChildModeExpanded) {
+                DisclosureGroup(isExpanded: $isChildModeExpanded) {
                         Toggle("启用儿童模式", isOn: $childMode)
                         if childMode {
                             LabeledContent("单词间停顿") {
@@ -111,13 +84,12 @@ struct PreferencesView: View {
                         Text("逐个朗读单词，并按设置时间停顿。")
                             .font(.callout)
                             .foregroundStyle(.secondary)
-                    } label: {
+                } label: {
                         Label("儿童模式", systemImage: "figure.and.child.holdinghands")
                             .font(.body.weight(.semibold))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                             .onTapGesture { isChildModeExpanded.toggle() }
-                    }
                 }
 
                 DisclosureGroup(isExpanded: $isTypographyExpanded) {
@@ -203,6 +175,12 @@ struct PreferencesView: View {
         case ..<0.52: return "正常 · \(String(format: "%.1f×", speed / 0.45))"
         case ..<0.61: return "快速 · \(String(format: "%.1f×", speed / 0.45))"
         default: return "很快 · \(String(format: "%.1f×", speed / 0.45))"
+        }
+    }
+
+    private var hasHighQualityVoice: Bool {
+        EnglishVoiceOption.available(for: accent).contains {
+            $0.quality == .enhanced || $0.quality == .premium
         }
     }
 }

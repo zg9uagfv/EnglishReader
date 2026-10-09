@@ -17,12 +17,6 @@
 		A10000000000000000000009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* PreferencesView.swift */; };
 		A1000000000000000000000A /* AudioPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* AudioPlaybackController.swift */; };
 		A1000000000000000000000B /* LLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* LLMService.swift */; };
-		A1000000000000000000000C /* KokoroSpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* KokoroSpeechEngine.swift */; };
-		A1000000000000000000000D /* KokoroSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* KokoroSwift */; };
-		A1000000000000000000000E /* MLXUtilsLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* MLXUtilsLibrary */; };
-		A1000000000000000000000F /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		A10000000000000000000010 /* kokoro-v1_0.safetensors in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* kokoro-v1_0.safetensors */; };
-		A10000000000000000000011 /* voices.npz in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* voices.npz */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,36 +32,16 @@
 		A2000000000000000000000A /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000B /* AudioPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackController.swift; sourceTree = "<group>"; };
 		A2000000000000000000000C /* LLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMService.swift; sourceTree = "<group>"; };
-		A2000000000000000000000D /* KokoroSpeechEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroSpeechEngine.swift; sourceTree = "<group>"; };
-		A2000000000000000000000E /* kokoro-v1_0.safetensors */ = {isa = PBXFileReference; lastKnownFileType = file; path = Resources/Kokoro/kokoro-v1_0.safetensors; sourceTree = "<group>"; };
-		A2000000000000000000000F /* voices.npz */ = {isa = PBXFileReference; lastKnownFileType = file; path = Resources/Kokoro/voices.npz; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A30000000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-				A1000000000000000000000D /* KokoroSwift in Frameworks */,
-				A1000000000000000000000E /* MLXUtilsLibrary in Frameworks */,
-			);
+			files = ();
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		A30000000000000000000004 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				A1000000000000000000000F /* KokoroSwift in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXGroup section */
 		A40000000000000000000001 = {
@@ -92,9 +66,6 @@
 				A2000000000000000000000A /* PreferencesView.swift */,
 				A2000000000000000000000B /* AudioPlaybackController.swift */,
 				A2000000000000000000000C /* LLMService.swift */,
-				A2000000000000000000000D /* KokoroSpeechEngine.swift */,
-				A2000000000000000000000E /* kokoro-v1_0.safetensors */,
-				A2000000000000000000000F /* voices.npz */,
 			);
 			path = EnglishReader;
 			sourceTree = "<group>";
@@ -114,16 +85,12 @@
 			buildPhases = (
 				A30000000000000000000002 /* Sources */,
 				A30000000000000000000001 /* Frameworks */,
-				A30000000000000000000004 /* Embed Frameworks */,
 				A30000000000000000000003 /* Resources */,
 			);
 			buildRules = ();
 			dependencies = ();
 			name = EnglishReader;
-			packageProductDependencies = (
-				A90000000000000000000001 /* KokoroSwift */,
-				A90000000000000000000002 /* MLXUtilsLibrary */,
-			);
+			packageProductDependencies = ();
 			productName = EnglishReader;
 			productReference = A20000000000000000000005 /* EnglishReader.app */;
 			productType = "com.apple.product-type.application";
@@ -148,10 +115,7 @@
 			productRefGroup = A40000000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			packageReferences = (
-				A80000000000000000000005 /* XCRemoteSwiftPackageReference "kokoro-ios" */,
-				A80000000000000000000006 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */,
-			);
+			packageReferences = ();
 			targets = (A50000000000000000000001 /* EnglishReader */);
 		};
 /* End PBXProject section */
@@ -162,8 +126,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000004 /* Assets.xcassets in Resources */,
-				A10000000000000000000010 /* kokoro-v1_0.safetensors in Resources */,
-				A10000000000000000000011 /* voices.npz in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -184,43 +146,10 @@
 				A10000000000000000000009 /* PreferencesView.swift in Sources */,
 				A1000000000000000000000A /* AudioPlaybackController.swift in Sources */,
 				A1000000000000000000000B /* LLMService.swift in Sources */,
-				A1000000000000000000000C /* KokoroSpeechEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		A80000000000000000000005 /* XCRemoteSwiftPackageReference "kokoro-ios" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/mlalma/kokoro-ios.git";
-			requirement = {
-				kind = exactVersion;
-				version = 1.0.11;
-			};
-		};
-		A80000000000000000000006 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/mlalma/MLXUtilsLibrary.git";
-			requirement = {
-				kind = exactVersion;
-				version = 0.0.6;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		A90000000000000000000001 /* KokoroSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A80000000000000000000005 /* XCRemoteSwiftPackageReference "kokoro-ios" */;
-			productName = KokoroSwift;
-		};
-		A90000000000000000000002 /* MLXUtilsLibrary */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A80000000000000000000006 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */;
-			productName = MLXUtilsLibrary;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A80000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };

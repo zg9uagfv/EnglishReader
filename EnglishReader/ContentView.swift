@@ -11,7 +11,7 @@ struct ContentView: View {
     @State private var text = ""
     @State private var accent: EnglishAccent = .american
     @State private var speed = 0.45
-    @AppStorage("ttsEngine") private var ttsEngine: TTSEngine = .kokoro
+    @AppStorage("ttsEngine") private var ttsEngine: TTSEngine = .system
     @State private var settingsUpdateTask: Task<Void, Never>?
     @State private var childMode = false
     @State private var wordPause = 1.0
@@ -51,7 +51,6 @@ struct ContentView: View {
                 accent: $accent,
                 selectedVoiceIdentifier: $selectedVoiceIdentifier,
                 speed: $speed,
-                ttsEngine: $ttsEngine,
                 childMode: $childMode,
                 wordPause: $wordPause,
                 fontStyle: $fontStyle,
@@ -88,9 +87,6 @@ struct ContentView: View {
             }
             .onChange(of: ttsEngine) { engine in
                 speech.stop()
-                if engine == .kokoro {
-                    childMode = false
-                }
             }
             .onChange(of: audioPlaybackRate) { value in
                 audio.setPlaybackRate(Float(value))
@@ -107,8 +103,8 @@ struct ContentView: View {
                 }
             }
             .onChange(of: speech.isSpeaking) { isSpeaking in
-                // Both system TTS and Kokoro clear their active word when the
-                // final buffer/utterance completes. Reset the slider's stored
+                // The system synthesizer clears its active word when the final
+                // utterance completes. Reset the slider's stored
                 // position too, so a finished article visibly returns home.
                 if !isSpeaking {
                     isScrubbingReadingProgress = false

@@ -20,15 +20,14 @@
 - 编辑与点词查询合并为同一文章区域；“进入阅读”后可直接点击任意单词
 - 主窗口提供偏好设置入口，集中管理 TTS、儿童模式、字体与字号
 - 可配置兼容 OpenAI 的翻译服务；API Key 只存储于系统钥匙串
-- 使用 Kokoro 本地神经网络 TTS（模型缺失时自动回退系统语音）
 - macOS 可调用本地 MLX Whisper 高精度转写，并将结果用于逐词高亮与进度同步
 
 > 点词查询使用在线词典与翻译服务，需要设备联网；查询结果会在本次运行期间缓存。
 
 ## 环境要求
 
-- Xcode 16.2 或更高版本（Kokoro 的 Swift 包使用 Swift Tools 6.2）
-- macOS 15+（Apple Silicon）或 iPadOS 18+ 真机（Kokoro / MLX Swift 要求；iOS 模拟器不支持 MLX）
+- Xcode 16.2 或更高版本
+- macOS 15+（Apple Silicon）或 iPadOS 18+ 真机（本地 MLX Whisper 仅适用于 Apple Silicon；iOS 模拟器不支持 MLX）
 - 音频转写首次使用时需要授予“语音识别”权限
 
 ## 编译与运行
@@ -56,20 +55,6 @@ xcodebuild -project EnglishReader.xcodeproj \
 - 音频：系统支持的格式，例如 `.mp3`、`.m4a`、`.wav`
 
 其他类型会显示格式提示。文本会进入编辑器；音频会显示播放器并将转写结果写入阅读区。
-
-## Kokoro 本地 TTS
-
-阅读朗读和点词朗读优先使用 Kokoro 的本地神经网络语音，不会把文本发送到服务端。模型和音色文件不会随源码提交；请在“偏好设置 → TTS 发音 → Kokoro 本地语音”填写模型目录与音色文件路径，或将它们放在默认目录：
-
-```
-~/Library/Application Support/EnglishReader/Kokoro/
-├── kokoro-v1_0.safetensors
-└── voices.npz
-```
-
-未安装、删除或加载失败时，应用会无缝回退到系统英语声音。Kokoro 使用 [mlalma/kokoro-ios](https://github.com/mlalma/kokoro-ios) 的 Swift / MLX 实现。
-
-模型文件约 600MB，可从 [KokoroTestApp 的 Resources](https://github.com/mlalma/KokoroTestApp/tree/main/Resources) 获取；将模型和 `voices.npz` 复制到上述目录后重启应用即可。
 
 ## 大模型服务
 
