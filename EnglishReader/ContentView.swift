@@ -377,7 +377,8 @@ struct ContentView: View {
                                 readingTokenView(
                                     tokens[tokenIndex],
                                     id: "\(sentenceIndex)-\(tokenIndex)",
-                                    wordIndex: sentenceOffset + tokenIndex
+                                    wordIndex: sentenceOffset + tokenIndex,
+                                    isSentenceStart: tokenIndex == 0
                                 )
                             }
                         }
@@ -411,7 +412,7 @@ struct ContentView: View {
         }
     }
 
-    private func readingTokenView(_ token: ReadingToken, id: String, wordIndex: Int) -> some View {
+    private func readingTokenView(_ token: ReadingToken, id: String, wordIndex: Int, isSentenceStart: Bool) -> some View {
         let word = token.lookupWord
         let isCurrentlySpoken = activeSpokenWordIndex == wordIndex
         let hasBeenRead = (activeSpokenWordIndex ?? -1) >= wordIndex
@@ -437,14 +438,21 @@ struct ContentView: View {
                     .onEnded { gesture in
                         switch gesture {
                         case .first(_):
+                            // 双击始终是查词，包括句首的第一个单词。
                             guard let word else { return }
                             selectedWord = WordSelection(id: id, word: word)
                         case .second(_):
-                            guard word != nil else { return }
-                            if highlightedTokens.contains(id) {
-                                highlightedTokens.remove(id)
+                            // 单击句首：从本句开头朗读并同步进度条；
+                            // 单击其他单词：切换高亮。
+                            if isSentenceStart {
+                                readSentenceFromStart(at: wordIndex)
                             } else {
-                                highlightedTokens.insert(id)
+                                guard word != nil else { return }
+                                if highlightedTokens.contains(id) {
+                                    highlightedTokens.remove(id)
+                                } else {
+                                    highlightedTokens.insert(id)
+                                }
                             }
                         }
                     }
@@ -454,7 +462,25 @@ struct ContentView: View {
                     speech.speakWord(selection.word, accent: accent, engine: ttsEngine, voiceIdentifier: selectedVoice)
                 }
             }
-            .help(word == nil ? "" : "双击查看音标和词义，单击高亮")
+            .help(tokenHelp(isSentenceStart: isSentenceStart, canLookUp: word != nil))
+    }
+
+    private func tokenHelp(isSentenceStart: Bool, canLookUp: Bool) -> String {
+        guard canLookUp || isSentenceStart else { return "" }
+        if isSentenceStart {
+            return canLookUp ? "单击从本句开头朗读，双击查看音标和词义" : "单击从本句开头朗读"
+        }
+        return "双击查看音标和词义，单击高亮"
+    }
+
+    /// 单击句首单词：从该句的第一个词开始（或跳转继续）朗读，并把进度条同步到句首。
+    private func readSentenceFromStart(at wordIndex: Int) {
+        pendingReadingWordIndex = Double(wordIndex)
+        if audio.hasAudio {
+            audio.seek(toWordAt: wordIndex)
+        } else {
+            seekTextReading(to: wordIndex)
+        }
     }
 
     private func wordSelectionBinding(for tokenID: String) -> Binding<WordSelection?> {

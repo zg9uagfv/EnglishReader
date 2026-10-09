@@ -138,6 +138,18 @@ final class AudioPlaybackController: ObservableObject {
 
     func skip(by seconds: Double) { seek(to: currentTime + seconds) }
 
+    /// Jumps to the whitespace token index the reader uses and resumes playback,
+    /// so tapping a sentence's first word keeps the player and the visible text
+    /// on the same word.
+    func seek(toWordAt index: Int) {
+        guard !isTranscribing, !timedWords.isEmpty else { return }
+        let clamped = min(max(0, index), timedWords.count - 1)
+        // 更新当前词的判定允许 0.05 秒的提前量，回退同样的距离，
+        // 避免短词的起始时间落在容差内时高亮落到下一个词。
+        seek(to: max(0, timedWords[clamped].startTime - 0.05))
+        if !isPlaying, player != nil { togglePlayback() }
+    }
+
     func formattedTime(_ seconds: Double) -> String {
         guard seconds.isFinite, seconds > 0 else { return "00:00" }
         let totalSeconds = Int(seconds.rounded(.down))
