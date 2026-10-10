@@ -46,6 +46,17 @@ xcodebuild -project EnglishReader.xcodeproj \
   CODE_SIGNING_ALLOWED=NO build
 ```
 
+## 打包安装
+
+一条命令构建 Release 并生成 macOS 安装包：
+
+```bash
+scripts/package-make.sh           # 生成 build/EnglishReader-<版本>.pkg
+scripts/package-make.sh install   # 生成后安装到 /Applications（需要管理员密码）
+```
+
+生成的安装包未做 Developer ID 签名与公证，仅适合本机或内部分发；对外分发需另行签名并公证。
+
 ## 文件导入
 
 点击“选择文件”后，应用会自动识别：
