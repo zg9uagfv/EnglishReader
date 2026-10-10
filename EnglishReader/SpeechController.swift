@@ -15,12 +15,6 @@ enum EnglishAccent: String, CaseIterable, Identifiable {
     }
 }
 
-enum TTSEngine: String, Identifiable {
-    case system
-
-    var id: Self { self }
-}
-
 struct EnglishVoiceOption: Identifiable, Hashable {
     let identifier: String
     let name: String
@@ -103,7 +97,6 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         _ text: String,
         accent: EnglishAccent,
         speed: Double,
-        engine: TTSEngine,
         childMode: Bool = false,
         wordPause: Double = 1.0,
         voiceIdentifier: String? = nil
@@ -120,7 +113,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
 
-        if childMode && engine == .system {
+        if childMode {
             childWords = content.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).map(String.init)
             nextChildWordIndex = 0
             childWordPause = wordPause
@@ -133,7 +126,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         }
     }
 
-    func updatePlaybackSettings(accent: EnglishAccent, speed: Double, engine: TTSEngine, wordPause: Double, voiceIdentifier: String?) {
+    func updatePlaybackSettings(accent: EnglishAccent, speed: Double, wordPause: Double, voiceIdentifier: String?) {
         guard isSpeaking else { return }
         selectedVoiceIdentifier = voiceIdentifier
         if isChildSequenceActive {
@@ -162,7 +155,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         }
     }
 
-    func speakWord(_ word: String, accent: EnglishAccent, engine: TTSEngine, voiceIdentifier: String? = nil) {
+    func speakWord(_ word: String, accent: EnglishAccent, voiceIdentifier: String? = nil) {
         resetChildSequence()
         isNormalSequenceActive = false
         activeUtterances.removeAll()
@@ -203,7 +196,6 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         in text: String,
         accent: EnglishAccent,
         speed: Double,
-        engine: TTSEngine,
         childMode: Bool,
         wordPause: Double,
         voiceIdentifier: String?

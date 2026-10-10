@@ -11,7 +11,6 @@ struct ContentView: View {
     @State private var text = ""
     @State private var accent: EnglishAccent = .american
     @State private var speed = 0.45
-    @AppStorage("ttsEngine") private var ttsEngine: TTSEngine = .system
     @State private var settingsUpdateTask: Task<Void, Never>?
     @State private var childMode = false
     @State private var wordPause = 1.0
@@ -84,9 +83,6 @@ struct ContentView: View {
             }
             .onChange(of: speed) { _ in
                 applyLiveSettings(debounced: true)
-            }
-            .onChange(of: ttsEngine) { engine in
-                speech.stop()
             }
             .onChange(of: audioPlaybackRate) { value in
                 audio.setPlaybackRate(Float(value))
@@ -459,7 +455,7 @@ struct ContentView: View {
             )
             .popover(item: wordSelectionBinding(for: id), arrowEdge: .bottom) { selection in
                 WordDetailView(word: selection.word, accent: accent) {
-                    speech.speakWord(selection.word, accent: accent, engine: ttsEngine, voiceIdentifier: selectedVoice)
+                    speech.speakWord(selection.word, accent: accent, voiceIdentifier: selectedVoice)
                 }
             }
             .help(tokenHelp(isSentenceStart: isSentenceStart, canLookUp: word != nil))
@@ -695,7 +691,6 @@ struct ContentView: View {
             speech.updatePlaybackSettings(
                 accent: accent,
                 speed: speed,
-                engine: ttsEngine,
                 wordPause: wordPause,
                 voiceIdentifier: selectedVoice
             )
@@ -710,7 +705,6 @@ struct ContentView: View {
                 text,
                 accent: accent,
                 speed: speed,
-                engine: ttsEngine,
                 childMode: childMode,
                 wordPause: wordPause,
                 voiceIdentifier: selectedVoice
@@ -724,7 +718,6 @@ struct ContentView: View {
             in: text,
             accent: accent,
             speed: speed,
-            engine: ttsEngine,
             childMode: childMode,
             wordPause: wordPause,
             voiceIdentifier: selectedVoice

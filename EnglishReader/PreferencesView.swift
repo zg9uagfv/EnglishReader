@@ -18,10 +18,6 @@ struct PreferencesView: View {
     var body: some View {
         Form {
                 DisclosureGroup(isExpanded: $isTTSExpanded) {
-                    LabeledContent("朗读引擎") {
-                        Text("系统语音")
-                    }
-
                     Picker("英语口音", selection: $accent) {
                         ForEach(EnglishAccent.allCases) { item in
                             Text(item.rawValue).tag(item)
