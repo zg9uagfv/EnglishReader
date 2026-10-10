@@ -93,8 +93,6 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     private var isNormalSequenceActive = false
     private var normalBaseWordIndex = 0
     private var selectedVoiceIdentifier: String?
-    private var wordAudioPlayer: AVPlayer?
-    private var wordAudioTask: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -167,20 +165,14 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     func speakWord(_ word: String, accent: EnglishAccent, engine: TTSEngine, voiceIdentifier: String? = nil) {
         resetChildSequence()
         isNormalSequenceActive = false
-        wordAudioTask?.cancel()
-        wordAudioPlayer?.pause()
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
         isSpeaking = true
         isPaused = false
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
-        let utterance = makeChildUtterance(
-            word,
-            followingWord: nil,
-            accent: accent,
-            speed: 0.42
-        )
+        // 单词点读是词典式发音，使用标准强读；弱读只用于句中有上下文的儿童模式逐词朗读。
+        let utterance = makeUtterance(word, accent: accent, speed: 0.42)
         activeUtterances.insert(ObjectIdentifier(utterance))
         synthesizer.speak(utterance)
     }
@@ -246,8 +238,6 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     }
 
     func stop() {
-        wordAudioTask?.cancel()
-        wordAudioPlayer?.pause()
         resetChildSequence()
         isNormalSequenceActive = false
         activeUtterances.removeAll()
