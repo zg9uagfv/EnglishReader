@@ -376,7 +376,9 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         case "a": ipa = "ə"
         case "an": ipa = "ən"
         case "the": ipa = nextStartsWithVowel ? "ði" : "ðə"
-        case "to": ipa = "tə"
+        // "to" normally takes its weak form before consonant sounds, but it
+        // keeps /tuː/ before a following vowel sound (for example, “to eat”).
+        case "to": ipa = nextStartsWithVowel ? "tuː" : "tə"
         case "of": ipa = "əv"
         case "and": ipa = "ənd"
         case "for": ipa = accent == .british ? "fə" : "fɚ"
