@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PreferencesView: View {
     @ObservedObject var llmConfiguration: LLMConfiguration
+    @ObservedObject var azureSpeechConfiguration: AzureSpeechConfiguration
     @Binding var accent: EnglishAccent
     @Binding var selectedVoiceIdentifier: String
     @Binding var speed: Double
@@ -32,6 +33,19 @@ struct PreferencesView: View {
                         }
                     }
 
+                    Toggle("使用 Azure Speech Neural", isOn: $azureSpeechConfiguration.isEnabled)
+                    if azureSpeechConfiguration.isEnabled {
+                        TextField("Azure 区域（例如 eastus）", text: $azureSpeechConfiguration.region)
+                        SecureField("Speech Key", text: $azureSpeechConfiguration.apiKey)
+                        TextField("美式声音", text: $azureSpeechConfiguration.americanVoice)
+                        TextField("英式声音", text: $azureSpeechConfiguration.britishVoice)
+                        if !azureSpeechConfiguration.isConfigured {
+                            Label("请填写 Azure 区域与 Speech Key 后再开始朗读。", systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+
                     GroupBox {
                         VStack(alignment: .leading, spacing: 5) {
                             Label(
@@ -54,7 +68,9 @@ struct PreferencesView: View {
                             Text(speedLabel).monospacedDigit().frame(width: 96, alignment: .trailing)
                         }
                     }
-                    Text("点词与文章朗读使用所选系统声音。")
+                    Text(azureSpeechConfiguration.isEnabled
+                        ? "Azure 密钥仅保存在本机钥匙串；朗读文本会发送至 Azure Speech。连接失败时自动使用系统声音。"
+                        : "点词与文章朗读使用所选系统声音。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } label: {

@@ -64,7 +64,8 @@ struct EnglishVoiceOption: Identifiable, Hashable {
     }
 }
 
-final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
+@MainActor
+final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
     private static let pronounIPattern = try! NSRegularExpression(
         pattern: #"(?<![\p{L}\p{N}])I(?![\p{L}\p{N}'’])"#
     )
@@ -87,6 +88,10 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     private var isNormalSequenceActive = false
     private var normalBaseWordIndex = 0
     private var selectedVoiceIdentifier: String?
+    private var azureSettings: AzureSpeechSettings?
+    private var azurePlayer: AVAudioPlayer?
+    private var azureTask: Task<Void, Never>?
+    private var azureRequestID = UUID()
 
     override init() {
         super.init()
@@ -99,7 +104,8 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         speed: Double,
         childMode: Bool = false,
         wordPause: Double = 1.0,
-        voiceIdentifier: String? = nil
+        voiceIdentifier: String? = nil,
+        azureSettings: AzureSpeechSettings? = nil
     ) {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return }
@@ -108,10 +114,12 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
+        stopAzurePlayback()
         isSpeaking = true
         isPaused = false
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
+        self.azureSettings = azureSettings
 
         if childMode {
             childWords = content.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).map(String.init)
@@ -122,13 +130,17 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             isChildSequenceActive = true
             speakNextChildWord()
         } else {
-            startNormalSpeech(content, accent: accent, speed: speed, baseWordIndex: 0)
+            if let azureSettings { startAzureSpeech(content, accent: accent, speed: speed, settings: azureSettings, baseWordIndex: 0) }
+            else { startNormalSpeech(content, accent: accent, speed: speed, baseWordIndex: 0) }
         }
     }
 
     func updatePlaybackSettings(accent: EnglishAccent, speed: Double, wordPause: Double, voiceIdentifier: String?) {
         guard isSpeaking else { return }
         selectedVoiceIdentifier = voiceIdentifier
+        // Azure synthesizes a complete MP3 request at a time. New settings take
+        // effect on the next play instead of interrupting the in-flight audio.
+        guard azureSettings == nil else { return }
         if isChildSequenceActive {
             childAccent = accent
             childSpeed = speed
@@ -155,15 +167,21 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         }
     }
 
-    func speakWord(_ word: String, accent: EnglishAccent, voiceIdentifier: String? = nil) {
+    func speakWord(_ word: String, accent: EnglishAccent, voiceIdentifier: String? = nil, azureSettings: AzureSpeechSettings? = nil) {
         resetChildSequence()
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
+        stopAzurePlayback()
         isSpeaking = true
         isPaused = false
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
+        self.azureSettings = azureSettings
+        if let azureSettings {
+            startAzureSpeech(word, accent: accent, speed: 0.42, settings: azureSettings, baseWordIndex: 0)
+            return
+        }
         // 单词点读是词典式发音，使用标准强读；弱读只用于句中有上下文的儿童模式逐词朗读。
         let utterance = makeUtterance(word, accent: accent, speed: 0.42)
         activeUtterances.insert(ObjectIdentifier(utterance))
@@ -171,6 +189,16 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     }
 
     func togglePause() {
+        if let azurePlayer {
+            if azurePlayer.isPlaying {
+                azurePlayer.pause()
+                isPaused = true
+            } else if isPaused {
+                azurePlayer.play()
+                isPaused = false
+            }
+            return
+        }
         if synthesizer.isPaused {
             if synthesizer.continueSpeaking() {
                 isPaused = false
@@ -198,7 +226,8 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         speed: Double,
         childMode: Bool,
         wordPause: Double,
-        voiceIdentifier: String?
+        voiceIdentifier: String?,
+        azureSettings: AzureSpeechSettings? = nil
     ) {
         let words = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -211,10 +240,12 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
+        stopAzurePlayback()
         isSpeaking = true
         isPaused = false
         currentSpokenWordIndex = index
         selectedVoiceIdentifier = voiceIdentifier
+        self.azureSettings = azureSettings
 
         if childMode {
             childWords = words
@@ -225,7 +256,9 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             isChildSequenceActive = true
             speakNextChildWord()
         } else {
-            startNormalSpeech(words[index...].joined(separator: " "), accent: accent, speed: speed, baseWordIndex: index)
+            let content = words[index...].joined(separator: " ")
+            if let azureSettings { startAzureSpeech(content, accent: accent, speed: speed, settings: azureSettings, baseWordIndex: index) }
+            else { startNormalSpeech(content, accent: accent, speed: speed, baseWordIndex: index) }
         }
     }
 
@@ -234,6 +267,8 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
+        stopAzurePlayback()
+        azureSettings = nil
         isSpeaking = false
         isPaused = false
         currentSpokenWordIndex = nil
@@ -243,6 +278,12 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         DispatchQueue.main.async {
             self.finish(utterance)
         }
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        guard player === azurePlayer else { return }
+        azurePlayer = nil
+        finishAzurePlayback()
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
@@ -315,6 +356,10 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             : nil
         currentSpokenWordIndex = nextChildWordIndex
         nextChildWordIndex += 1
+        if let azureSettings {
+            startAzureSpeech(word, accent: childAccent, speed: childSpeed, settings: azureSettings, baseWordIndex: currentSpokenWordIndex ?? 0)
+            return
+        }
         let utterance = makeChildUtterance(
             word,
             followingWord: followingWord,
@@ -356,6 +401,63 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         utterance.preUtteranceDelay = 0.05
         activeUtterances.insert(ObjectIdentifier(utterance))
         synthesizer.speak(utterance)
+    }
+
+    private func startAzureSpeech(
+        _ text: String,
+        accent: EnglishAccent,
+        speed: Double,
+        settings: AzureSpeechSettings,
+        baseWordIndex: Int
+    ) {
+        stopAzurePlayback()
+        let requestID = UUID()
+        azureRequestID = requestID
+        isNormalSequenceActive = !isChildSequenceActive
+        azureTask = Task { [weak self] in
+            do {
+                let data = try await AzureSpeechService.synthesize(text: text, speed: speed, settings: settings)
+                guard !Task.isCancelled, let self, self.azureRequestID == requestID else { return }
+                let player = try AVAudioPlayer(data: data)
+                guard self.azureRequestID == requestID else { return }
+                player.delegate = self
+                self.azurePlayer = player
+                player.prepareToPlay()
+                player.play()
+            } catch {
+                guard !Task.isCancelled, let self, self.azureRequestID == requestID else { return }
+                self.azureSettings = nil
+                if self.isChildSequenceActive {
+                    let utterance = self.makeChildUtterance(text, followingWord: nil, accent: accent, speed: speed)
+                    self.activeUtterances.insert(ObjectIdentifier(utterance))
+                    self.synthesizer.speak(utterance)
+                } else {
+                    self.startNormalSpeech(text, accent: accent, speed: speed, baseWordIndex: baseWordIndex)
+                }
+            }
+        }
+    }
+
+    private func finishAzurePlayback() {
+        azureTask = nil
+        if isChildSequenceActive, nextChildWordIndex < childWords.count {
+            scheduleNextChildWord()
+        } else {
+            resetChildSequence()
+            isNormalSequenceActive = false
+            isSpeaking = false
+            isPaused = false
+            currentSpokenWordIndex = nil
+        }
+    }
+
+    private func stopAzurePlayback() {
+        azureRequestID = UUID()
+        azureTask?.cancel()
+        azureTask = nil
+        azurePlayer?.delegate = nil
+        azurePlayer?.stop()
+        azurePlayer = nil
     }
 
     private func makeChildUtterance(

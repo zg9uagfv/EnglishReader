@@ -8,6 +8,7 @@ struct ContentView: View {
     @StateObject private var speech = SpeechController()
     @StateObject private var audio = AudioPlaybackController()
     @StateObject private var llmConfiguration = LLMConfiguration()
+    @StateObject private var azureSpeechConfiguration = AzureSpeechConfiguration()
     @State private var text = ""
     @State private var accent: EnglishAccent = .american
     @State private var speed = 0.45
@@ -47,6 +48,7 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             PreferencesView(
                 llmConfiguration: llmConfiguration,
+                azureSpeechConfiguration: azureSpeechConfiguration,
                 accent: $accent,
                 selectedVoiceIdentifier: $selectedVoiceIdentifier,
                 speed: $speed,
@@ -455,7 +457,7 @@ struct ContentView: View {
             )
             .popover(item: wordSelectionBinding(for: id), arrowEdge: .bottom) { selection in
                 WordDetailView(word: selection.word, accent: accent) {
-                    speech.speakWord(selection.word, accent: accent, voiceIdentifier: selectedVoice)
+                    speech.speakWord(selection.word, accent: accent, voiceIdentifier: selectedVoice, azureSettings: azureSettings)
                 }
             }
             .help(tokenHelp(isSentenceStart: isSentenceStart, canLookUp: word != nil))
@@ -707,7 +709,8 @@ struct ContentView: View {
                 speed: speed,
                 childMode: childMode,
                 wordPause: wordPause,
-                voiceIdentifier: selectedVoice
+                voiceIdentifier: selectedVoice,
+                azureSettings: azureSettings
             )
         }
     }
@@ -720,8 +723,13 @@ struct ContentView: View {
             speed: speed,
             childMode: childMode,
             wordPause: wordPause,
-            voiceIdentifier: selectedVoice
+            voiceIdentifier: selectedVoice,
+            azureSettings: azureSettings
         )
+    }
+
+    private var azureSettings: AzureSpeechSettings? {
+        azureSpeechConfiguration.settings(for: accent)
     }
 
     private func updateAudioPlaybackRateInput(_ input: String) {
