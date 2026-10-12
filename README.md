@@ -71,7 +71,7 @@ scripts/package-make.sh install   # 生成后安装到 /Applications（需要管
 
 在 ElevenLabs 账号中创建 API Key。然后在本应用“偏好设置 → TTS 发音”中打开“使用 ElevenLabs 在线语音”并填入 API Key。美式 Sarah 和英式 George 是已验证可在免费方案通过 API 使用的示例声音；也可从 My Voices 复制其他可用声音的 Voice ID。默认模型为 `eleven_flash_v2_5`。API Key 保存在系统钥匙串，朗读文本会发送至 ElevenLabs 并消耗账户额度；连接失败时会提示并改用系统声音。免费方案不能通过 API 使用 Voice Library 声音。
 
-儿童模式逐词朗读始终使用系统声音，以保留弱读规则并避免逐词请求消耗额度。在线朗读的语速在下次开始时生效；当前版本尚未使用 ElevenLabs 时间戳来同步逐词高亮。
+儿童模式使用所选 ElevenLabs 声音按词停顿，单次停顿最多 3 秒；长文章会分段生成并消耗额度，单词高亮跟随 ElevenLabs 返回的时间戳。若在线合成失败，会提示并改用系统语音继续朗读。在线朗读的语速在下次开始时生效。
 
 ## 大模型服务
 

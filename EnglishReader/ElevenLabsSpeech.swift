@@ -61,17 +61,74 @@ final class ElevenLabsSpeechConfiguration: ObservableObject {
 }
 
 enum ElevenLabsSpeechService {
+    struct TimedAudio: Sendable {
+        let data: Data
+        let wordStartTimes: [TimeInterval]
+    }
+
     static func synthesize(text: String, speed: Double, settings: ElevenLabsSpeechSettings) async throws -> Data {
+        let request = try makeRequest(text: text, speed: speed, settings: settings, withTimestamps: false)
+        let (data, http) = try await perform(request)
+        guard http.mimeType == "audio/mpeg" || http.mimeType == "audio/mp3" else {
+            throw ElevenLabsSpeechError.invalidResponse
+        }
+        return data
+    }
+
+    static func synthesizeChildWords(
+        _ words: [String],
+        pause: Double,
+        speed: Double,
+        settings: ElevenLabsSpeechSettings
+    ) async throws -> TimedAudio {
+        guard !words.isEmpty else { throw ElevenLabsSpeechError.invalidResponse }
+        let breakTag = String(format: "<break time=\"%.1fs\" />", locale: Locale(identifier: "en_US_POSIX"), min(3.0, max(0.5, pause)))
+        let separator = " \(breakTag) "
+        var text = ""
+        var wordOffsets: [Int] = []
+        for word in words {
+            if !text.isEmpty { text += separator }
+            wordOffsets.append(text.count)
+            text += word
+        }
+
+        let request = try makeRequest(text: text, speed: speed, settings: settings, withTimestamps: true)
+        let (data, http) = try await perform(request)
+        guard http.mimeType == "application/json",
+              let response = try? JSONDecoder().decode(TimingResponse.self, from: data),
+              let audio = Data(base64Encoded: response.audioBase64), !audio.isEmpty else {
+            throw ElevenLabsSpeechError.invalidResponse
+        }
+        let alignment = response.alignment
+        let startTimes: [TimeInterval]
+        if alignment?.characters.joined() == text,
+           let times = alignment?.characterStartTimesSeconds,
+           times.count == alignment?.characters.count,
+           wordOffsets.allSatisfy({ $0 < times.count }) {
+            startTimes = wordOffsets.map { times[$0] }
+        } else {
+            startTimes = []
+        }
+        return TimedAudio(data: audio, wordStartTimes: startTimes)
+    }
+
+    private static func makeRequest(
+        text: String,
+        speed: Double,
+        settings: ElevenLabsSpeechSettings,
+        withTimestamps: Bool
+    ) throws -> URLRequest {
         let validVoiceID = settings.voiceID.range(of: #"^[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil
+        let endpoint = withTimestamps ? "/with-timestamps" : ""
         guard validVoiceID,
-              let url = URL(string: "https://api.elevenlabs.io/v1/text-to-speech/\(settings.voiceID)?output_format=mp3_44100_128") else {
+              let url = URL(string: "https://api.elevenlabs.io/v1/text-to-speech/\(settings.voiceID)\(endpoint)?output_format=mp3_44100_128") else {
             throw ElevenLabsSpeechError.invalidVoiceID
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(settings.apiKey, forHTTPHeaderField: "xi-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("audio/mpeg", forHTTPHeaderField: "Accept")
+        request.setValue(withTimestamps ? "application/json" : "audio/mpeg", forHTTPHeaderField: "Accept")
         // The article speed slider is calibrated for AVSpeechSynthesizer. ElevenLabs
         // accepts a narrower synthesis speed range of 0.7...1.2.
         let voiceSpeed = min(1.2, max(0.7, speed / 0.45))
@@ -87,6 +144,10 @@ enum ElevenLabsSpeechService {
             ]
         ])
 
+        return request
+    }
+
+    private static func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ElevenLabsSpeechError.invalidResponse }
         guard 200..<300 ~= http.statusCode, !data.isEmpty else {
@@ -97,10 +158,27 @@ enum ElevenLabsSpeechService {
                 code: detail?["code"] as? String
             )
         }
-        guard http.mimeType == "audio/mpeg" || http.mimeType == "audio/mp3" else {
-            throw ElevenLabsSpeechError.invalidResponse
+        return (data, http)
+    }
+
+    private struct TimingResponse: Decodable {
+        let audioBase64: String
+        let alignment: Alignment?
+
+        enum CodingKeys: String, CodingKey {
+            case audioBase64 = "audio_base64"
+            case alignment
         }
-        return data
+    }
+
+    private struct Alignment: Decodable {
+        let characters: [String]
+        let characterStartTimesSeconds: [TimeInterval]
+
+        enum CodingKeys: String, CodingKey {
+            case characters
+            case characterStartTimesSeconds = "character_start_times_seconds"
+        }
     }
 }
 

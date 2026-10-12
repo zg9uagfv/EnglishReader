@@ -76,7 +76,7 @@ struct PreferencesView: View {
                         }
                     }
                     Text(elevenLabsSpeechConfiguration.isEnabled
-                        ? "API Key 仅保存在本机钥匙串；文章与点词文本会发送至 ElevenLabs 并消耗额度。儿童模式使用系统语音。连接失败时自动使用系统声音。"
+                        ? "API Key 仅保存在本机钥匙串；文章、点词与儿童模式文本会发送至 ElevenLabs 并消耗额度。连接失败时自动使用系统声音。"
                         : "点词与文章朗读使用所选系统声音。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -93,14 +93,16 @@ struct PreferencesView: View {
                         if childMode {
                             LabeledContent("单词间停顿") {
                                 HStack {
-                                    Slider(value: $wordPause, in: 0.5...5.0, step: 0.5)
+                                    Slider(value: $wordPause, in: 0.5...(elevenLabsSpeechConfiguration.isEnabled ? 3.0 : 5.0), step: 0.5)
                                     Text(String(format: "%.1f 秒", wordPause))
                                         .monospacedDigit()
                                         .frame(width: 62, alignment: .trailing)
                                 }
                             }
                         }
-                        Text("逐个朗读单词，并按设置时间停顿。")
+                        Text(elevenLabsSpeechConfiguration.isEnabled
+                            ? "使用所选 ElevenLabs 声音逐词停顿，最多 3 秒；长文章会分段生成并消耗额度。"
+                            : "逐个朗读单词，并按设置时间停顿。")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                 } label: {
