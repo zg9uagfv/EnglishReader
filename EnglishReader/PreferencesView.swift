@@ -2,7 +2,7 @@ import SwiftUI
 
 struct PreferencesView: View {
     @ObservedObject var llmConfiguration: LLMConfiguration
-    @ObservedObject var azureSpeechConfiguration: AzureSpeechConfiguration
+    @ObservedObject var elevenLabsSpeechConfiguration: ElevenLabsSpeechConfiguration
     @Binding var accent: EnglishAccent
     @Binding var selectedVoiceIdentifier: String
     @Binding var speed: Double
@@ -33,17 +33,24 @@ struct PreferencesView: View {
                         }
                     }
 
-                    Toggle("使用 Azure Speech Neural", isOn: $azureSpeechConfiguration.isEnabled)
-                    if azureSpeechConfiguration.isEnabled {
-                        TextField("Azure 区域（例如 eastus）", text: $azureSpeechConfiguration.region)
-                        SecureField("Speech Key", text: $azureSpeechConfiguration.apiKey)
-                        TextField("美式声音", text: $azureSpeechConfiguration.americanVoice)
-                        TextField("英式声音", text: $azureSpeechConfiguration.britishVoice)
-                        if !azureSpeechConfiguration.isConfigured {
-                            Label("请填写 Azure 区域与 Speech Key 后再开始朗读。", systemImage: "exclamationmark.triangle")
+                    Toggle("使用 ElevenLabs 在线语音", isOn: $elevenLabsSpeechConfiguration.isEnabled)
+                    if elevenLabsSpeechConfiguration.isEnabled {
+                        SecureField("ElevenLabs API Key", text: $elevenLabsSpeechConfiguration.apiKey)
+                        TextField("美式声音 Voice ID", text: $elevenLabsSpeechConfiguration.americanVoiceID)
+                        TextField("英式声音 Voice ID", text: $elevenLabsSpeechConfiguration.britishVoiceID)
+                        Button("使用免费方案示例声音（美式 Sarah / 英式 George）") {
+                            elevenLabsSpeechConfiguration.useSampleVoices()
+                        }
+                        .buttonStyle(ReaderOutlinedButtonStyle())
+                        TextField("模型 ID", text: $elevenLabsSpeechConfiguration.modelID)
+                        if elevenLabsSpeechConfiguration.settings(for: accent) == nil {
+                            Label("请填写 API Key 和当前口音对应的 Voice ID。", systemImage: "exclamationmark.triangle")
                                 .font(.caption)
                                 .foregroundStyle(.orange)
                         }
+                        Text("API Key 在 ElevenLabs 的 Developers → API Keys 创建；Voice ID 可从 My Voices 中复制。免费方案的 Voice Library 声音不能通过 API 调用。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     GroupBox {
@@ -68,8 +75,8 @@ struct PreferencesView: View {
                             Text(speedLabel).monospacedDigit().frame(width: 96, alignment: .trailing)
                         }
                     }
-                    Text(azureSpeechConfiguration.isEnabled
-                        ? "Azure 密钥仅保存在本机钥匙串；朗读文本会发送至 Azure Speech。连接失败时自动使用系统声音。"
+                    Text(elevenLabsSpeechConfiguration.isEnabled
+                        ? "API Key 仅保存在本机钥匙串；文章与点词文本会发送至 ElevenLabs 并消耗额度。儿童模式使用系统语音。连接失败时自动使用系统声音。"
                         : "点词与文章朗读使用所选系统声音。")
                         .font(.callout)
                         .foregroundStyle(.secondary)

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Security
 
@@ -45,7 +46,12 @@ final class LLMConfiguration: ObservableObject {
         localWhisperModel = defaults.string(forKey: "localWhisperModel") ?? "mlx-community/whisper-large-v3-turbo"
         localWhisperModelDirectory = defaults.string(forKey: "localWhisperModelDirectory") ?? ""
         let savedRuntime = defaults.string(forKey: "localWhisperPythonPath") ?? ""
-        localWhisperPythonPath = savedRuntime.isEmpty ? Self.detectLocalWhisperRuntime() : savedRuntime
+        localWhisperPythonPath = FileManager.default.isExecutableFile(atPath: savedRuntime)
+            ? savedRuntime
+            : Self.detectLocalWhisperRuntime()
+        if localWhisperPythonPath != savedRuntime {
+            defaults.set(localWhisperPythonPath, forKey: "localWhisperPythonPath")
+        }
         if shouldApplyOpenAIDefaults {
             defaults.set(baseURL, forKey: "llmBaseURL")
             defaults.set(model, forKey: "llmModel")
@@ -69,10 +75,8 @@ final class LLMConfiguration: ObservableObject {
 
     private static func detectLocalWhisperRuntime() -> String {
         let candidates = [
-            "/private/tmp/englishreader-whisper312/bin/python",
+            NSHomeDirectory() + "/.local/share/englishreader-whisper/bin/python",
             NSHomeDirectory() + "/Library/Application Support/EnglishReader/whisper/bin/python",
-            "/opt/homebrew/bin/python3",
-            "/usr/local/bin/python3"
         ]
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? ""
     }
@@ -164,7 +168,31 @@ enum LLMService {
 
 @MainActor
 enum LocalWhisperService {
-    static func transcribe(url: URL, configuration: LLMConfiguration) async throws -> LLMTranscription {
+    private final class CancellableProcess: @unchecked Sendable {
+        let process = Process()
+        private let lock = NSLock()
+        private var cancelled = false
+
+        func start() throws {
+            lock.lock()
+            defer { lock.unlock() }
+            if cancelled { throw CancellationError() }
+            try process.run()
+        }
+
+        func cancel() {
+            lock.lock()
+            defer { lock.unlock() }
+            cancelled = true
+            if process.isRunning { process.terminate() }
+        }
+    }
+
+    static func transcribe(
+        url: URL,
+        configuration: LLMConfiguration,
+        onChunk: @MainActor (LLMTranscription, Int, Int) -> Void
+    ) async throws {
         let runtimePath = configuration.localWhisperPythonPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !runtimePath.isEmpty else {
             throw LocalWhisperError.runtimeNotConfigured
@@ -178,33 +206,78 @@ enum LocalWhisperService {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: outputDirectory) }
 
-        var arguments = [
-            "-m", "whispermlx", url.path,
-            "--model", configuration.localWhisperModel,
-            "--language", "en",
-            "--output_dir", outputDirectory.path,
-            "--output_format", "json",
-            "--verbose", "False",
-            "--log-level", "warning",
-            "--print_progress", "False"
-        ]
-        let modelDirectory = configuration.localWhisperModelDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !modelDirectory.isEmpty {
-            arguments += ["--model_dir", modelDirectory]
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration).seconds
+        guard duration.isFinite, duration > 0 else {
+            throw LocalWhisperError.invalidDuration
         }
+        let chunkLength = 60.0
+        let chunkCount = Int(ceil(duration / chunkLength))
 
-        let result = try await run(executable: runtimePath, arguments: arguments)
-        guard result.status == 0 else {
-            throw LocalWhisperError.processFailed(summary(of: result.error.isEmpty ? result.output : result.error))
+        for chunkIndex in 0..<chunkCount {
+            try Task.checkCancellation()
+            let start = Double(chunkIndex) * chunkLength
+            let length = min(chunkLength, duration - start)
+            let inputURL = chunkCount == 1
+                ? url
+                : try await exportChunk(from: asset, start: start, duration: length, index: chunkIndex, to: outputDirectory)
+            defer { if chunkCount > 1 { try? FileManager.default.removeItem(at: inputURL) } }
+
+            var arguments = [
+                "-m", "whispermlx", inputURL.path,
+                "--model", configuration.localWhisperModel,
+                "--language", "en",
+                "--output_dir", outputDirectory.path,
+                "--output_format", "json",
+                "--verbose", "False",
+                "--log-level", "warning",
+                "--print_progress", "False"
+            ]
+            let modelDirectory = configuration.localWhisperModelDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !modelDirectory.isEmpty {
+                arguments += ["--model_dir", modelDirectory]
+            }
+
+            let result = try await run(executable: runtimePath, arguments: arguments)
+            try Task.checkCancellation()
+            guard result.status == 0 else {
+                throw LocalWhisperError.processFailed(summary(of: result.output))
+            }
+            let jsonURL = outputDirectory
+                .appendingPathComponent(inputURL.deletingPathExtension().lastPathComponent)
+                .appendingPathExtension("json")
+            guard FileManager.default.fileExists(atPath: jsonURL.path) else {
+                throw LocalWhisperError.outputMissing
+            }
+            let transcription = try parse(data: Data(contentsOf: jsonURL))
+            let shifted = LLMTranscription(
+                text: transcription.text,
+                words: transcription.words.map {
+                    TimedTranscriptWord(text: $0.text, start: start + $0.start, end: start + $0.end)
+                }
+            )
+            onChunk(shifted, chunkIndex + 1, chunkCount)
         }
-        let jsonURL = try findJSON(in: outputDirectory)
-            .unwrap(or: LocalWhisperError.outputMissing)
-        let data = try Data(contentsOf: jsonURL)
-        return try parse(data: data)
+    }
+
+    private static func exportChunk(from asset: AVAsset, start: Double, duration: Double, index: Int, to directory: URL) async throws -> URL {
+        guard let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
+            throw LocalWhisperError.exportUnavailable
+        }
+        let outputURL = directory.appendingPathComponent(String(format: "chunk_%04d.m4a", index))
+        exporter.outputURL = outputURL
+        exporter.outputFileType = .m4a
+        exporter.timeRange = CMTimeRange(
+            start: CMTime(seconds: start, preferredTimescale: 600),
+            duration: CMTime(seconds: duration, preferredTimescale: 600)
+        )
+        try await exporter.export(to: outputURL, as: .m4a)
+        return outputURL
     }
 
     private static func parse(data: Data) throws -> LLMTranscription {
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["text"] is String || json["segments"] is [[String: Any]] else {
             throw LocalWhisperError.outputInvalid
         }
         let segments = json["segments"] as? [[String: Any]] ?? []
@@ -218,30 +291,12 @@ enum LocalWhisperService {
         }
         let segmentText = segments.compactMap { $0["text"] as? String }.joined(separator: " ")
         let text = (json["text"] as? String) ?? segmentText
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LocalWhisperError.outputInvalid
-        }
         return LLMTranscription(text: text, words: words)
     }
 
     private static func number(_ value: Any?) -> Double? {
         if let value = value as? Double { return value }
         if let value = value as? NSNumber { return value.doubleValue }
-        return nil
-    }
-
-    private static func findJSON(in directory: URL) throws -> URL? {
-        let keys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey]
-        let enumerator = FileManager.default.enumerator(
-            at: directory,
-            includingPropertiesForKeys: keys,
-            options: [.skipsHiddenFiles]
-        )
-        while let candidate = enumerator?.nextObject() as? URL {
-            guard candidate.pathExtension.lowercased() == "json" else { continue }
-            let values = try candidate.resourceValues(forKeys: Set(keys))
-            if values.isRegularFile == true { return candidate }
-        }
         return nil
     }
 
@@ -253,36 +308,48 @@ enum LocalWhisperService {
         return String(lines.last ?? "未知错误")
     }
 
-    private static func run(executable: String, arguments: [String]) async throws -> (status: Int32, output: String, error: String) {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                let output = Pipe()
-                let error = Pipe()
-                process.executableURL = URL(fileURLWithPath: executable)
-                process.arguments = arguments
-                // The app may inherit a SOCKS proxy from the shell. httpx used by
-                // the model downloader cannot use it without socksio, so let the
-                // local Whisper process use a direct connection.
-                var environment = ProcessInfo.processInfo.environment
-                for key in ["ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"] {
-                    environment.removeValue(forKey: key)
-                }
-                process.environment = environment
-                process.standardOutput = output
-                process.standardError = error
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    continuation.resume(returning: (
-                        process.terminationStatus,
-                        String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "",
-                        String(data: error.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                    ))
-                } catch {
-                    continuation.resume(throwing: error)
+    private static func run(executable: String, arguments: [String]) async throws -> (status: Int32, output: String) {
+        try Task.checkCancellation()
+        let cancellable = CancellableProcess()
+        let process = cancellable.process
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        let logURL = FileManager.default.temporaryDirectory
+                            .appendingPathComponent("EnglishReader-Whisper-log-\(UUID().uuidString)")
+                        FileManager.default.createFile(atPath: logURL.path, contents: nil)
+                        let log = try FileHandle(forWritingTo: logURL)
+                        defer {
+                            try? log.close()
+                            try? FileManager.default.removeItem(at: logURL)
+                        }
+                        process.executableURL = URL(fileURLWithPath: executable)
+                        process.arguments = arguments
+                        // The model downloader cannot use an inherited SOCKS proxy
+                        // without socksio, so the subprocess uses a direct connection.
+                        var environment = ProcessInfo.processInfo.environment
+                        for key in ["ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"] {
+                            environment.removeValue(forKey: key)
+                        }
+                        process.environment = environment
+                        process.standardOutput = log
+                        process.standardError = log
+                        try cancellable.start()
+                        process.waitUntilExit()
+                        try log.synchronize()
+                        let output = String(data: try Data(contentsOf: logURL), encoding: .utf8) ?? ""
+                        continuation.resume(returning: (
+                            process.terminationStatus,
+                            output
+                        ))
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
             }
+        } onCancel: {
+            cancellable.cancel()
         }
     }
 }
@@ -290,6 +357,8 @@ enum LocalWhisperService {
 private enum LocalWhisperError: LocalizedError {
     case runtimeNotConfigured
     case runtimeUnavailable
+    case invalidDuration
+    case exportUnavailable
     case outputMissing
     case outputInvalid
     case processFailed(String)
@@ -298,17 +367,12 @@ private enum LocalWhisperError: LocalizedError {
         switch self {
         case .runtimeNotConfigured: return "请在偏好设置中填写 Python / Whisper 运行时路径。"
         case .runtimeUnavailable: return "指定的 Python / Whisper 运行时不可执行。"
+        case .invalidDuration: return "无法读取音频时长。"
+        case .exportUnavailable: return "当前设备无法分段处理该音频。"
         case .outputMissing: return "本地 Whisper 未生成转写文件。"
         case .outputInvalid: return "本地 Whisper 的转写文件格式无效。"
         case .processFailed(let message): return "本地 Whisper 运行失败：\(message)"
         }
-    }
-}
-
-private extension Optional {
-    func unwrap(or error: @autoclosure () -> Error) throws -> Wrapped {
-        guard let self else { throw error() }
-        return self
     }
 }
 

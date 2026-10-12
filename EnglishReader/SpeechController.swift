@@ -73,6 +73,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     @Published private(set) var isSpeaking = false
     @Published private(set) var isPaused = false
     @Published private(set) var currentSpokenWordIndex: Int?
+    @Published private(set) var lastError: String?
 
     private let synthesizer = AVSpeechSynthesizer()
     private var activeUtterances: Set<ObjectIdentifier> = []
@@ -88,10 +89,10 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     private var isNormalSequenceActive = false
     private var normalBaseWordIndex = 0
     private var selectedVoiceIdentifier: String?
-    private var azureSettings: AzureSpeechSettings?
-    private var azurePlayer: AVAudioPlayer?
-    private var azureTask: Task<Void, Never>?
-    private var azureRequestID = UUID()
+    private var elevenLabsSettings: ElevenLabsSpeechSettings?
+    private var elevenLabsPlayer: AVAudioPlayer?
+    private var elevenLabsTask: Task<Void, Never>?
+    private var elevenLabsRequestID = UUID()
 
     override init() {
         super.init()
@@ -105,7 +106,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         childMode: Bool = false,
         wordPause: Double = 1.0,
         voiceIdentifier: String? = nil,
-        azureSettings: AzureSpeechSettings? = nil
+        elevenLabsSettings: ElevenLabsSpeechSettings? = nil
     ) {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return }
@@ -114,12 +115,13 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
-        stopAzurePlayback()
+        stopElevenLabsPlayback()
         isSpeaking = true
         isPaused = false
+        lastError = nil
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
-        self.azureSettings = azureSettings
+        self.elevenLabsSettings = childMode ? nil : elevenLabsSettings
 
         if childMode {
             childWords = content.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).map(String.init)
@@ -130,7 +132,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             isChildSequenceActive = true
             speakNextChildWord()
         } else {
-            if let azureSettings { startAzureSpeech(content, accent: accent, speed: speed, settings: azureSettings, baseWordIndex: 0) }
+            if let elevenLabsSettings { startElevenLabsSpeech(content, accent: accent, speed: speed, settings: elevenLabsSettings, baseWordIndex: 0) }
             else { startNormalSpeech(content, accent: accent, speed: speed, baseWordIndex: 0) }
         }
     }
@@ -138,9 +140,9 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     func updatePlaybackSettings(accent: EnglishAccent, speed: Double, wordPause: Double, voiceIdentifier: String?) {
         guard isSpeaking else { return }
         selectedVoiceIdentifier = voiceIdentifier
-        // Azure synthesizes a complete MP3 request at a time. New settings take
+        // ElevenLabs synthesizes a complete MP3 request at a time. New settings take
         // effect on the next play instead of interrupting the in-flight audio.
-        guard azureSettings == nil else { return }
+        guard elevenLabsSettings == nil else { return }
         if isChildSequenceActive {
             childAccent = accent
             childSpeed = speed
@@ -167,19 +169,20 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         }
     }
 
-    func speakWord(_ word: String, accent: EnglishAccent, voiceIdentifier: String? = nil, azureSettings: AzureSpeechSettings? = nil) {
+    func speakWord(_ word: String, accent: EnglishAccent, voiceIdentifier: String? = nil, elevenLabsSettings: ElevenLabsSpeechSettings? = nil) {
         resetChildSequence()
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
-        stopAzurePlayback()
+        stopElevenLabsPlayback()
         isSpeaking = true
         isPaused = false
+        lastError = nil
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
-        self.azureSettings = azureSettings
-        if let azureSettings {
-            startAzureSpeech(word, accent: accent, speed: 0.42, settings: azureSettings, baseWordIndex: 0)
+        self.elevenLabsSettings = elevenLabsSettings
+        if let elevenLabsSettings {
+            startElevenLabsSpeech(word, accent: accent, speed: 0.42, settings: elevenLabsSettings, baseWordIndex: 0)
             return
         }
         // 单词点读是词典式发音，使用标准强读；弱读只用于句中有上下文的儿童模式逐词朗读。
@@ -189,12 +192,12 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     }
 
     func togglePause() {
-        if let azurePlayer {
-            if azurePlayer.isPlaying {
-                azurePlayer.pause()
+        if let elevenLabsPlayer {
+            if elevenLabsPlayer.isPlaying {
+                elevenLabsPlayer.pause()
                 isPaused = true
             } else if isPaused {
-                azurePlayer.play()
+                elevenLabsPlayer.play()
                 isPaused = false
             }
             return
@@ -227,7 +230,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         childMode: Bool,
         wordPause: Double,
         voiceIdentifier: String?,
-        azureSettings: AzureSpeechSettings? = nil
+        elevenLabsSettings: ElevenLabsSpeechSettings? = nil
     ) {
         let words = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -240,12 +243,13 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
-        stopAzurePlayback()
+        stopElevenLabsPlayback()
         isSpeaking = true
         isPaused = false
+        lastError = nil
         currentSpokenWordIndex = index
         selectedVoiceIdentifier = voiceIdentifier
-        self.azureSettings = azureSettings
+        self.elevenLabsSettings = childMode ? nil : elevenLabsSettings
 
         if childMode {
             childWords = words
@@ -257,7 +261,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             speakNextChildWord()
         } else {
             let content = words[index...].joined(separator: " ")
-            if let azureSettings { startAzureSpeech(content, accent: accent, speed: speed, settings: azureSettings, baseWordIndex: index) }
+            if let elevenLabsSettings { startElevenLabsSpeech(content, accent: accent, speed: speed, settings: elevenLabsSettings, baseWordIndex: index) }
             else { startNormalSpeech(content, accent: accent, speed: speed, baseWordIndex: index) }
         }
     }
@@ -267,8 +271,8 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
-        stopAzurePlayback()
-        azureSettings = nil
+        stopElevenLabsPlayback()
+        elevenLabsSettings = nil
         isSpeaking = false
         isPaused = false
         currentSpokenWordIndex = nil
@@ -281,9 +285,9 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        guard player === azurePlayer else { return }
-        azurePlayer = nil
-        finishAzurePlayback()
+        guard player === elevenLabsPlayer else { return }
+        elevenLabsPlayer = nil
+        finishElevenLabsPlayback()
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
@@ -356,10 +360,6 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             : nil
         currentSpokenWordIndex = nextChildWordIndex
         nextChildWordIndex += 1
-        if let azureSettings {
-            startAzureSpeech(word, accent: childAccent, speed: childSpeed, settings: azureSettings, baseWordIndex: currentSpokenWordIndex ?? 0)
-            return
-        }
         let utterance = makeChildUtterance(
             word,
             followingWord: followingWord,
@@ -403,61 +403,51 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         synthesizer.speak(utterance)
     }
 
-    private func startAzureSpeech(
+    private func startElevenLabsSpeech(
         _ text: String,
         accent: EnglishAccent,
         speed: Double,
-        settings: AzureSpeechSettings,
+        settings: ElevenLabsSpeechSettings,
         baseWordIndex: Int
     ) {
-        stopAzurePlayback()
+        stopElevenLabsPlayback()
         let requestID = UUID()
-        azureRequestID = requestID
+        elevenLabsRequestID = requestID
         isNormalSequenceActive = !isChildSequenceActive
-        azureTask = Task { [weak self] in
+        elevenLabsTask = Task { [weak self] in
             do {
-                let data = try await AzureSpeechService.synthesize(text: text, speed: speed, settings: settings)
-                guard !Task.isCancelled, let self, self.azureRequestID == requestID else { return }
+                let data = try await ElevenLabsSpeechService.synthesize(text: text, speed: speed, settings: settings)
+                guard !Task.isCancelled, let self, self.elevenLabsRequestID == requestID else { return }
                 let player = try AVAudioPlayer(data: data)
-                guard self.azureRequestID == requestID else { return }
+                guard self.elevenLabsRequestID == requestID else { return }
                 player.delegate = self
-                self.azurePlayer = player
+                self.elevenLabsPlayer = player
                 player.prepareToPlay()
-                player.play()
+                guard player.play() else { throw ElevenLabsSpeechError.invalidResponse }
             } catch {
-                guard !Task.isCancelled, let self, self.azureRequestID == requestID else { return }
-                self.azureSettings = nil
-                if self.isChildSequenceActive {
-                    let utterance = self.makeChildUtterance(text, followingWord: nil, accent: accent, speed: speed)
-                    self.activeUtterances.insert(ObjectIdentifier(utterance))
-                    self.synthesizer.speak(utterance)
-                } else {
-                    self.startNormalSpeech(text, accent: accent, speed: speed, baseWordIndex: baseWordIndex)
-                }
+                guard !Task.isCancelled, let self, self.elevenLabsRequestID == requestID else { return }
+                self.lastError = "\(error.localizedDescription) 已改用系统语音。"
+                self.elevenLabsSettings = nil
+                self.startNormalSpeech(text, accent: accent, speed: speed, baseWordIndex: baseWordIndex)
             }
         }
     }
 
-    private func finishAzurePlayback() {
-        azureTask = nil
-        if isChildSequenceActive, nextChildWordIndex < childWords.count {
-            scheduleNextChildWord()
-        } else {
-            resetChildSequence()
-            isNormalSequenceActive = false
-            isSpeaking = false
-            isPaused = false
-            currentSpokenWordIndex = nil
-        }
+    private func finishElevenLabsPlayback() {
+        elevenLabsTask = nil
+        isNormalSequenceActive = false
+        isSpeaking = false
+        isPaused = false
+        currentSpokenWordIndex = nil
     }
 
-    private func stopAzurePlayback() {
-        azureRequestID = UUID()
-        azureTask?.cancel()
-        azureTask = nil
-        azurePlayer?.delegate = nil
-        azurePlayer?.stop()
-        azurePlayer = nil
+    private func stopElevenLabsPlayback() {
+        elevenLabsRequestID = UUID()
+        elevenLabsTask?.cancel()
+        elevenLabsTask = nil
+        elevenLabsPlayer?.delegate = nil
+        elevenLabsPlayer?.stop()
+        elevenLabsPlayer = nil
     }
 
     private func makeChildUtterance(

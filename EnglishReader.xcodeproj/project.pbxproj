@@ -17,7 +17,7 @@
 		A10000000000000000000009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* PreferencesView.swift */; };
 		A1000000000000000000000A /* AudioPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* AudioPlaybackController.swift */; };
 		A1000000000000000000000B /* LLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* LLMService.swift */; };
-		A1000000000000000000000C /* AzureSpeech.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* AzureSpeech.swift */; };
+		A1000000000000000000000C /* ElevenLabsSpeech.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* ElevenLabsSpeech.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,7 +33,7 @@
 		A2000000000000000000000A /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000B /* AudioPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackController.swift; sourceTree = "<group>"; };
 		A2000000000000000000000C /* LLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMService.swift; sourceTree = "<group>"; };
-		A2000000000000000000000D /* AzureSpeech.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AzureSpeech.swift; sourceTree = "<group>"; };
+		A2000000000000000000000D /* ElevenLabsSpeech.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsSpeech.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -68,7 +68,7 @@
 				A2000000000000000000000A /* PreferencesView.swift */,
 				A2000000000000000000000B /* AudioPlaybackController.swift */,
 				A2000000000000000000000C /* LLMService.swift */,
-				A2000000000000000000000D /* AzureSpeech.swift */,
+				A2000000000000000000000D /* ElevenLabsSpeech.swift */,
 			);
 			path = EnglishReader;
 			sourceTree = "<group>";
@@ -149,7 +149,7 @@
 				A10000000000000000000009 /* PreferencesView.swift in Sources */,
 				A1000000000000000000000A /* AudioPlaybackController.swift in Sources */,
 				A1000000000000000000000B /* LLMService.swift in Sources */,
-				A1000000000000000000000C /* AzureSpeech.swift in Sources */,
+				A1000000000000000000000C /* ElevenLabsSpeech.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

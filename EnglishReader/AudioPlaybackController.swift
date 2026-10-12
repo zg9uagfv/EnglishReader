@@ -27,6 +27,9 @@ final class AudioPlaybackController: ObservableObject {
     private var scopedURL: URL?
     private var transcriptionTask: SFSpeechRecognitionTask?
     private var timedWords: [TimedWord] = []
+    private var whisperWords: [TimedWord] = []
+    private var whisperText = ""
+    private var hasWhisperWordAlignment = true
     private var isSeeking = false
 
     var hasAudio: Bool { player != nil }
@@ -81,6 +84,23 @@ final class AudioPlaybackController: ObservableObject {
         transcriptionText = timedWords.isEmpty ? EnglishTextFormatter.formatArticle(transcription.text) : alignedText(from: timedWords)
         transcriptionStatus = nil
         isTranscribing = false
+        updateCurrentWordIndex()
+    }
+
+    func appendWhisperChunk(_ transcription: LLMTranscription, completed: Int, total: Int) {
+        let chunkText = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !chunkText.isEmpty {
+            whisperText += (whisperText.isEmpty ? "" : " ") + chunkText
+            if transcription.words.isEmpty { hasWhisperWordAlignment = false }
+        }
+        whisperWords.append(contentsOf: transcription.words.map {
+            TimedWord(text: $0.text, startTime: $0.start, duration: max(0.01, $0.end - $0.start))
+        })
+        timedWords = hasWhisperWordAlignment ? normalizedTimedWords(whisperWords) : []
+        transcriptionText = timedWords.isEmpty
+            ? EnglishTextFormatter.formatArticle(whisperText)
+            : alignedText(from: timedWords)
+        transcriptionStatus = "已转写 \(completed)/\(total) 段，继续处理中…"
         updateCurrentWordIndex()
     }
 
@@ -344,6 +364,9 @@ final class AudioPlaybackController: ObservableObject {
         scopedURL = nil
         transcriptionTask = nil
         timedWords = []
+        whisperWords = []
+        whisperText = ""
+        hasWhisperWordAlignment = true
         isPlaying = false
         isTranscribing = false
     }

@@ -8,11 +8,13 @@ struct ContentView: View {
     @StateObject private var speech = SpeechController()
     @StateObject private var audio = AudioPlaybackController()
     @StateObject private var llmConfiguration = LLMConfiguration()
-    @StateObject private var azureSpeechConfiguration = AzureSpeechConfiguration()
+    @StateObject private var elevenLabsSpeechConfiguration = ElevenLabsSpeechConfiguration()
     @State private var text = ""
     @State private var accent: EnglishAccent = .american
     @State private var speed = 0.45
     @State private var settingsUpdateTask: Task<Void, Never>?
+    @State private var localWhisperTask: Task<Void, Never>?
+    @State private var localWhisperRequestID = UUID()
     @State private var childMode = false
     @State private var wordPause = 1.0
     @State private var fontSize = 20.0
@@ -48,7 +50,7 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             PreferencesView(
                 llmConfiguration: llmConfiguration,
-                azureSpeechConfiguration: azureSpeechConfiguration,
+                elevenLabsSpeechConfiguration: elevenLabsSpeechConfiguration,
                 accent: $accent,
                 selectedVoiceIdentifier: $selectedVoiceIdentifier,
                 speed: $speed,
@@ -123,6 +125,8 @@ struct ContentView: View {
                       updatedText != audioTranscriptText else { return }
                 // The source text has diverged from the audio transcript. Keeping
                 // the old player here would make the play button use stale audio.
+                localWhisperTask?.cancel()
+                localWhisperRequestID = UUID()
                 audio.unload()
                 speech.stop()
             }
@@ -145,7 +149,10 @@ struct ContentView: View {
                 allowsMultipleSelection: false,
                 onCompletion: importFile
             )
-            .alert("无法读取文件", isPresented: Binding(
+            .onChange(of: speech.lastError) { newError in
+                if let newError { errorMessage = newError }
+            }
+            .alert("提示", isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )) {
@@ -457,7 +464,7 @@ struct ContentView: View {
             )
             .popover(item: wordSelectionBinding(for: id), arrowEdge: .bottom) { selection in
                 WordDetailView(word: selection.word, accent: accent) {
-                    speech.speakWord(selection.word, accent: accent, voiceIdentifier: selectedVoice, azureSettings: azureSettings)
+                    speech.speakWord(selection.word, accent: accent, voiceIdentifier: selectedVoice, elevenLabsSettings: elevenLabsSettings)
                 }
             }
             .help(tokenHelp(isSentenceStart: isSentenceStart, canLookUp: word != nil))
@@ -642,7 +649,7 @@ struct ContentView: View {
             if audio.isTranscribing {
                 ProgressView()
                     .progressViewStyle(.linear)
-                Label("模型正在处理音频，完成后会自动整理为段落。", systemImage: "waveform.badge.magnifyingglass")
+                Label("已转写的内容会先显示，后续内容完成后继续追加。", systemImage: "waveform.badge.magnifyingglass")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -710,7 +717,7 @@ struct ContentView: View {
                 childMode: childMode,
                 wordPause: wordPause,
                 voiceIdentifier: selectedVoice,
-                azureSettings: azureSettings
+                elevenLabsSettings: elevenLabsSettings
             )
         }
     }
@@ -724,12 +731,12 @@ struct ContentView: View {
             childMode: childMode,
             wordPause: wordPause,
             voiceIdentifier: selectedVoice,
-            azureSettings: azureSettings
+            elevenLabsSettings: elevenLabsSettings
         )
     }
 
-    private var azureSettings: AzureSpeechSettings? {
-        azureSpeechConfiguration.settings(for: accent)
+    private var elevenLabsSettings: ElevenLabsSpeechSettings? {
+        elevenLabsSpeechConfiguration.settings(for: accent)
     }
 
     private func updateAudioPlaybackRateInput(_ input: String) {
@@ -865,6 +872,8 @@ struct ContentView: View {
     private func importFile(_ result: Result<[URL], Error>) {
         do {
             guard let url = try result.get().first else { return }
+            localWhisperTask?.cancel()
+            localWhisperRequestID = UUID()
             let resourceValues = try url.resourceValues(forKeys: [.contentTypeKey, .isDirectoryKey])
             guard resourceValues.isDirectory != true else {
                 throw FileImportError.unsupportedFormat
@@ -884,10 +893,17 @@ struct ContentView: View {
                 speech.stop()
                 if usesLocalWhisper {
                     audio.beginTranscription(status: "正在使用本地 Whisper 高精度转写…")
-                    Task {
+                    let requestID = localWhisperRequestID
+                    localWhisperTask = Task {
                         do {
-                            audio.apply(transcription: try await LocalWhisperService.transcribe(url: url, configuration: configuration))
+                            try await LocalWhisperService.transcribe(url: url, configuration: configuration) { chunk, completed, total in
+                                guard localWhisperRequestID == requestID else { return }
+                                audio.appendWhisperChunk(chunk, completed: completed, total: total)
+                            }
+                            guard localWhisperRequestID == requestID else { return }
+                            audio.finishTranscription(status: audio.transcriptionText.isEmpty ? "未识别到语音内容" : nil)
                         } catch {
+                            guard localWhisperRequestID == requestID, !(error is CancellationError) else { return }
                             audio.finishTranscription(status: "本地 Whisper 转写失败")
                             errorMessage = "本地 Whisper 转写失败：\(transcriptionErrorMessage(error))"
                         }
