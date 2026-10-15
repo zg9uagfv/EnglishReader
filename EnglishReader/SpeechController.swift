@@ -406,6 +406,8 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         let start = nextChildWordIndex
         let end = min(start + 8, childWords.count)
         let words = Array(childWords[start..<end])
+        let previousText = childChunkContext(before: start)
+        let nextText = childChunkContext(after: end)
         nextChildWordIndex = end
         currentSpokenWordIndex = start
         let prefetched = elevenLabsPrefetchStartIndex == start ? elevenLabsPrefetchTask : nil
@@ -422,7 +424,8 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
                 if let prefetched { audio = try await prefetched.value }
                 else {
                     audio = try await ElevenLabsSpeechService.synthesizeChildWords(
-                        words, pause: childWordPause, speed: childSpeed, settings: settings
+                        words, pause: childWordPause, speed: childSpeed, settings: settings,
+                        previousText: previousText, nextText: nextText
                     )
                 }
                 guard !Task.isCancelled, let self, self.elevenLabsRequestID == requestID else { return }
@@ -455,14 +458,27 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         let start = nextChildWordIndex
         let end = min(start + 8, childWords.count)
         let words = Array(childWords[start..<end])
+        let previousText = childChunkContext(before: start)
+        let nextText = childChunkContext(after: end)
         let pause = childWordPause
         let speed = childSpeed
         elevenLabsPrefetchStartIndex = start
         elevenLabsPrefetchTask = Task {
             try await ElevenLabsSpeechService.synthesizeChildWords(
-                words, pause: pause, speed: speed, settings: settings
+                words, pause: pause, speed: speed, settings: settings,
+                previousText: previousText, nextText: nextText
             )
         }
+    }
+
+    private func childChunkContext(before index: Int) -> String? {
+        guard index > 0 else { return nil }
+        return childWords[max(0, index - 8)..<index].joined(separator: " ")
+    }
+
+    private func childChunkContext(after index: Int) -> String? {
+        guard index < childWords.count else { return nil }
+        return childWords[index..<min(index + 8, childWords.count)].joined(separator: " ")
     }
 
     private func scheduleNextElevenLabsChildChunk() {

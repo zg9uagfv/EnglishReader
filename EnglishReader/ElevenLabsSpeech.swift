@@ -79,7 +79,9 @@ enum ElevenLabsSpeechService {
         _ words: [String],
         pause: Double,
         speed: Double,
-        settings: ElevenLabsSpeechSettings
+        settings: ElevenLabsSpeechSettings,
+        previousText: String? = nil,
+        nextText: String? = nil
     ) async throws -> TimedAudio {
         guard !words.isEmpty else { throw ElevenLabsSpeechError.invalidResponse }
         let breakTag = String(format: "<break time=\"%.1fs\" />", locale: Locale(identifier: "en_US_POSIX"), min(3.0, max(0.5, pause)))
@@ -92,7 +94,10 @@ enum ElevenLabsSpeechService {
             text += word
         }
 
-        let request = try makeRequest(text: text, speed: speed, settings: settings, withTimestamps: true)
+        let request = try makeRequest(
+            text: text, speed: speed, settings: settings, withTimestamps: true,
+            previousText: previousText, nextText: nextText
+        )
         let (data, http) = try await perform(request)
         guard http.mimeType == "application/json",
               let response = try? JSONDecoder().decode(TimingResponse.self, from: data),
@@ -116,7 +121,9 @@ enum ElevenLabsSpeechService {
         text: String,
         speed: Double,
         settings: ElevenLabsSpeechSettings,
-        withTimestamps: Bool
+        withTimestamps: Bool,
+        previousText: String? = nil,
+        nextText: String? = nil
     ) throws -> URLRequest {
         let validVoiceID = settings.voiceID.range(of: #"^[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil
         let endpoint = withTimestamps ? "/with-timestamps" : ""
@@ -132,17 +139,20 @@ enum ElevenLabsSpeechService {
         // The article speed slider is calibrated for AVSpeechSynthesizer. ElevenLabs
         // accepts a narrower synthesis speed range of 0.7...1.2.
         let voiceSpeed = min(1.2, max(0.7, speed / 0.45))
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
+        var body: [String: Any] = [
             "text": text,
             "model_id": settings.modelID,
             "voice_settings": [
-                "stability": 0.5,
+                "stability": 0.8,
                 "similarity_boost": 0.75,
                 "style": 0.0,
                 "use_speaker_boost": true,
                 "speed": voiceSpeed
             ]
-        ])
+        ]
+        if let previousText { body["previous_text"] = previousText }
+        if let nextText { body["next_text"] = nextText }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         return request
     }
