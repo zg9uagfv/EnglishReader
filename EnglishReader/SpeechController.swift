@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import NaturalLanguage
 
 enum EnglishAccent: String, CaseIterable, Identifiable {
     case american = "美式英语"
@@ -72,6 +73,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
 
     @Published private(set) var isSpeaking = false
     @Published private(set) var isPaused = false
+    @Published private(set) var isReadingArticle = false
     @Published private(set) var currentSpokenWordIndex: Int?
     @Published private(set) var lastError: String?
 
@@ -83,6 +85,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     private var childAccent = EnglishAccent.american
     private var childSpeed = 0.45
     private var isChildSequenceActive = false
+    private var isSystemChildReading = false
     private var pendingNextWord: DispatchWorkItem?
     private var normalText = ""
     private var normalWordOffset = 0
@@ -118,12 +121,14 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         guard !content.isEmpty else { return }
 
         resetChildSequence()
+        isSystemChildReading = false
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
         stopElevenLabsPlayback()
         isSpeaking = true
         isPaused = false
+        isReadingArticle = true
         lastError = nil
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
@@ -137,7 +142,11 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             childSpeed = speed
             isChildSequenceActive = true
             if elevenLabsSettings != nil { startElevenLabsChildChunk() }
-            else { speakNextChildWord() }
+            else {
+                resetChildSequence()
+                isSystemChildReading = true
+                startNormalSpeech(content, accent: accent, speed: min(speed, 0.4), baseWordIndex: 0)
+            }
         } else {
             if let elevenLabsSettings { startElevenLabsSpeech(content, accent: accent, speed: speed, settings: elevenLabsSettings, baseWordIndex: 0) }
             else { startNormalSpeech(content, accent: accent, speed: speed, baseWordIndex: 0) }
@@ -147,9 +156,24 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     func updatePlaybackSettings(accent: EnglishAccent, speed: Double, wordPause: Double, voiceIdentifier: String?) {
         guard isSpeaking else { return }
         selectedVoiceIdentifier = voiceIdentifier
-        // ElevenLabs synthesizes a complete MP3 request at a time. New settings take
-        // effect on the next play instead of interrupting the in-flight audio.
-        guard elevenLabsSettings == nil else { return }
+        if elevenLabsSettings != nil {
+            if isChildSequenceActive {
+                let speedChanged = childSpeed != speed
+                childAccent = accent
+                childSpeed = speed
+                childWordPause = wordPause
+                if speedChanged {
+                    elevenLabsPrefetchTask?.cancel()
+                    elevenLabsPrefetchTask = nil
+                    elevenLabsPrefetchStartIndex = nil
+                }
+                if pendingNextWord != nil {
+                    scheduleNextElevenLabsChildChunk()
+                }
+            }
+            // Audio already returned by ElevenLabs cannot change synthesis speed.
+            return
+        }
         if isChildSequenceActive {
             childAccent = accent
             childSpeed = speed
@@ -172,18 +196,22 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             let baseWordIndex = currentSpokenWordIndex ?? normalBaseWordIndex
             activeUtterances.removeAll()
             synthesizer.stopSpeaking(at: .immediate)
-            startNormalSpeech(remaining, accent: accent, speed: speed, baseWordIndex: baseWordIndex)
+            startNormalSpeech(remaining, accent: accent,
+                              speed: isSystemChildReading ? min(speed, 0.4) : speed,
+                              baseWordIndex: baseWordIndex)
         }
     }
 
     func speakWord(_ word: String, accent: EnglishAccent, voiceIdentifier: String? = nil, elevenLabsSettings: ElevenLabsSpeechSettings? = nil) {
         resetChildSequence()
+        isSystemChildReading = false
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
         stopElevenLabsPlayback()
         isSpeaking = true
         isPaused = false
+        isReadingArticle = false
         lastError = nil
         currentSpokenWordIndex = nil
         selectedVoiceIdentifier = voiceIdentifier
@@ -258,12 +286,14 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
 
         let index = min(max(0, requestedIndex), words.count - 1)
         resetChildSequence()
+        isSystemChildReading = false
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
         stopElevenLabsPlayback()
         isSpeaking = true
         isPaused = false
+        isReadingArticle = true
         lastError = nil
         currentSpokenWordIndex = index
         selectedVoiceIdentifier = voiceIdentifier
@@ -277,7 +307,12 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
             childSpeed = speed
             isChildSequenceActive = true
             if elevenLabsSettings != nil { startElevenLabsChildChunk() }
-            else { speakNextChildWord() }
+            else {
+                resetChildSequence()
+                isSystemChildReading = true
+                startNormalSpeech(words[index...].joined(separator: " "), accent: accent,
+                                  speed: min(speed, 0.4), baseWordIndex: index)
+            }
         } else {
             let content = words[index...].joined(separator: " ")
             if let elevenLabsSettings { startElevenLabsSpeech(content, accent: accent, speed: speed, settings: elevenLabsSettings, baseWordIndex: index) }
@@ -287,6 +322,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
 
     func stop() {
         resetChildSequence()
+        isSystemChildReading = false
         isNormalSequenceActive = false
         activeUtterances.removeAll()
         synthesizer.stopSpeaking(at: .immediate)
@@ -294,6 +330,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         elevenLabsSettings = nil
         isSpeaking = false
         isPaused = false
+        isReadingArticle = false
         currentSpokenWordIndex = nil
     }
 
@@ -362,9 +399,11 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
                 scheduleNextChildWord()
             } else {
                 resetChildSequence()
+                isSystemChildReading = false
                 isNormalSequenceActive = false
                 isSpeaking = false
                 isPaused = false
+                isReadingArticle = false
                 currentSpokenWordIndex = nil
             }
         }
@@ -404,7 +443,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
               nextChildWordIndex < childWords.count else { return }
         pendingNextWord = nil
         let start = nextChildWordIndex
-        let end = min(start + 8, childWords.count)
+        let end = childChunkEndIndex(startingAt: start)
         let words = Array(childWords[start..<end])
         let previousText = childChunkContext(before: start)
         let nextText = childChunkContext(after: end)
@@ -424,7 +463,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
                 if let prefetched { audio = try await prefetched.value }
                 else {
                     audio = try await ElevenLabsSpeechService.synthesizeChildWords(
-                        words, pause: childWordPause, speed: childSpeed, settings: settings,
+                        words, speed: childSpeed, settings: settings,
                         previousText: previousText, nextText: nextText
                     )
                 }
@@ -447,8 +486,11 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
                 self.lastError = "\(error.localizedDescription) 已改用系统语音。"
                 self.stopElevenLabsPlayback()
                 self.elevenLabsSettings = nil
-                self.nextChildWordIndex = start
-                self.speakNextChildWord()
+                let remaining = self.childWords[start...].joined(separator: " ")
+                self.resetChildSequence()
+                self.isSystemChildReading = true
+                self.startNormalSpeech(remaining, accent: self.childAccent,
+                                       speed: min(self.childSpeed, 0.4), baseWordIndex: start)
             }
         }
     }
@@ -456,16 +498,15 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
     private func prefetchNextElevenLabsChildChunk(settings: ElevenLabsSpeechSettings) {
         guard nextChildWordIndex < childWords.count else { return }
         let start = nextChildWordIndex
-        let end = min(start + 8, childWords.count)
+        let end = childChunkEndIndex(startingAt: start)
         let words = Array(childWords[start..<end])
         let previousText = childChunkContext(before: start)
         let nextText = childChunkContext(after: end)
-        let pause = childWordPause
         let speed = childSpeed
         elevenLabsPrefetchStartIndex = start
         elevenLabsPrefetchTask = Task {
             try await ElevenLabsSpeechService.synthesizeChildWords(
-                words, pause: pause, speed: speed, settings: settings,
+                words, speed: speed, settings: settings,
                 previousText: previousText, nextText: nextText
             )
         }
@@ -481,13 +522,29 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         return childWords[index..<min(index + 8, childWords.count)].joined(separator: " ")
     }
 
+    private func childChunkEndIndex(startingAt start: Int) -> Int {
+        // Keep short sentences together so dialogue plays with natural prosody.
+        let limit = min(start + 50, childWords.count)
+        let candidate = childWords[start..<limit].joined(separator: " ")
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = candidate
+        var wordCount = limit - start
+        tokenizer.enumerateTokens(in: candidate.startIndex..<candidate.endIndex) { range, _ in
+            let count = candidate[..<range.upperBound]
+                .split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+            if count >= 25 { wordCount = count }
+            return true
+        }
+        return start + max(1, wordCount)
+    }
+
     private func scheduleNextElevenLabsChildChunk() {
         pendingNextWord?.cancel()
         let work = DispatchWorkItem { [weak self] in
             self?.startElevenLabsChildChunk()
         }
         pendingNextWord = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + min(3.0, childWordPause), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + min(2.0, childWordPause), execute: work)
     }
 
     private func startElevenLabsProgressTracking() {
@@ -495,10 +552,14 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         elevenLabsProgressTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, let player = self.elevenLabsPlayer else { return }
-                if let index = self.elevenLabsWordStartTimes.lastIndex(where: { $0 <= player.currentTime }) {
-                    self.currentSpokenWordIndex = self.elevenLabsChunkBaseWordIndex + index
+                if player.isPlaying,
+                   let index = self.elevenLabsWordStartTimes.lastIndex(where: { $0 <= player.currentTime }) {
+                    let wordIndex = self.elevenLabsChunkBaseWordIndex + index
+                    if self.currentSpokenWordIndex != wordIndex {
+                        self.currentSpokenWordIndex = wordIndex
+                    }
                 }
-                try? await Task.sleep(nanoseconds: 50_000_000)
+                try? await Task.sleep(nanoseconds: 30_000_000)
             }
         }
     }
@@ -571,6 +632,7 @@ final class SpeechController: NSObject, ObservableObject, AVSpeechSynthesizerDel
         isNormalSequenceActive = false
         isSpeaking = false
         isPaused = false
+        isReadingArticle = false
         currentSpokenWordIndex = nil
     }
 

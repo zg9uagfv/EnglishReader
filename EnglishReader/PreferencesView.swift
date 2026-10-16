@@ -91,18 +91,23 @@ struct PreferencesView: View {
                 DisclosureGroup(isExpanded: $isChildModeExpanded) {
                         Toggle("启用儿童模式", isOn: $childMode)
                         if childMode {
-                            LabeledContent("单词间停顿") {
+                            LabeledContent(elevenLabsSpeechConfiguration.isEnabled ? "语段间停顿" : "连续朗读") {
                                 HStack {
-                                    Slider(value: $wordPause, in: 0.5...(elevenLabsSpeechConfiguration.isEnabled ? 3.0 : 5.0), step: 0.5)
-                                    Text(String(format: "%.1f 秒", wordPause))
-                                        .monospacedDigit()
-                                        .frame(width: 62, alignment: .trailing)
+                                    if elevenLabsSpeechConfiguration.isEnabled {
+                                        Slider(value: $wordPause, in: 0.0...2.0, step: 0.5)
+                                        Text(String(format: "%.1f 秒", wordPause))
+                                            .monospacedDigit()
+                                            .frame(width: 62, alignment: .trailing)
+                                    } else {
+                                        Text("较慢语速，不拆分单词")
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }
                         Text(elevenLabsSpeechConfiguration.isEnabled
-                            ? "使用所选 ElevenLabs 声音逐词停顿，最多 3 秒；长文章会分段生成并消耗额度。"
-                            : "逐个朗读单词，并按设置时间停顿。")
+                            ? "使用所选 ElevenLabs 声音以较慢语速连续朗读，每段约 25–50 词；可设置段间停顿。"
+                            : "使用系统声音以较慢语速连续朗读。")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                 } label: {

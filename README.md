@@ -71,7 +71,7 @@ scripts/package-make.sh install   # 生成后安装到 /Applications（需要管
 
 在 ElevenLabs 账号中创建 API Key。然后在本应用“偏好设置 → TTS 发音”中打开“使用 ElevenLabs 在线语音”并填入 API Key。美式 Sarah 和英式 George 是已验证可在免费方案通过 API 使用的示例声音；也可从 My Voices 复制其他可用声音的 Voice ID。默认模型为 `eleven_flash_v2_5`。API Key 保存在系统钥匙串，朗读文本会发送至 ElevenLabs 并消耗账户额度；连接失败时会提示并改用系统声音。免费方案不能通过 API 使用 Voice Library 声音。
 
-儿童模式使用所选 ElevenLabs 声音按词停顿，单次停顿最多 3 秒；长文章会分段生成并消耗额度，单词高亮跟随 ElevenLabs 返回的时间戳。若在线合成失败，会提示并改用系统语音继续朗读。在线朗读的语速在下次开始时生效。
+儿童模式使用所选 ElevenLabs 声音以较慢语速连续朗读，每段约 25–50 词，默认段间停顿 0.5 秒；不会在每个单词处截断音频。长文章会消耗更多额度，单词高亮跟随 ElevenLabs 返回的时间戳。若在线合成失败，会提示并改用较慢语速的系统语音连续朗读。关闭儿童模式时，普通朗读会将全文一次发送给 ElevenLabs。在线朗读的语速在下次开始时生效。
 
 ## 大模型服务
 
@@ -127,7 +127,7 @@ NLTK_ALLOW_PROXIED_URLOPEN=1 \
    `~/.local/share/englishreader-whisper/bin/python`。
 4. 模型目录可留空，或填写自定义的模型缓存目录。
 
-`whisper-large-v3-turbo` 权重约 1.6GB。M1/M2 且 24GB 统一内存的 MacBook 适合单文件高精度转写；首次下载和长音频推理需要较长时间。长音频会按约 60 秒分段转写：每完成一段就立即显示并继续追加后续内容，同时保留逐词时间戳用于进度同步。
+`whisper-large-v3-turbo` 权重约 1.6GB。M1/M2 且 24GB 统一内存的 MacBook 适合单文件高精度转写；首次下载和长音频推理需要较长时间。长音频会按约 60 秒分段转写：第一段有可读文本后即可阅读、播放和拖动进度，剩余部分在后台继续识别并追加，同时保留逐词时间戳用于进度同步。
 
 ### 本地 Whisper 排错
 

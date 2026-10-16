@@ -13,6 +13,7 @@ final class AudioPlaybackController: ObservableObject {
     @Published private(set) var transcriptionText = ""
     @Published private(set) var transcriptionStatus: String?
     @Published private(set) var isTranscribing = false
+    @Published private(set) var canReadWhileTranscribing = false
 
     private struct TimedWord {
         let text: String
@@ -33,6 +34,7 @@ final class AudioPlaybackController: ObservableObject {
     private var isSeeking = false
 
     var hasAudio: Bool { player != nil }
+    var canControlPlayback: Bool { !isTranscribing || canReadWhileTranscribing }
 
     deinit {
         if let timeObserver { player?.removeTimeObserver(timeObserver) }
@@ -55,6 +57,7 @@ final class AudioPlaybackController: ObservableObject {
         transcriptionText = ""
         transcriptionStatus = shouldTranscribe ? "正在识别音频内容…" : nil
         isTranscribing = shouldTranscribe
+        canReadWhileTranscribing = false
         self.playbackRate = clampedPlaybackRate(playbackRate)
         observe(player: player, item: item)
         if shouldTranscribe { transcribe(url: url, localeIdentifier: localeIdentifier) }
@@ -63,12 +66,14 @@ final class AudioPlaybackController: ObservableObject {
     func startSystemTranscription(url: URL, localeIdentifier: String) {
         transcriptionStatus = "正在使用系统语音识别…"
         isTranscribing = true
+        canReadWhileTranscribing = false
         transcribe(url: url, localeIdentifier: localeIdentifier)
     }
 
     func beginTranscription(status: String) {
         transcriptionStatus = status
         isTranscribing = true
+        canReadWhileTranscribing = false
     }
 
     func finishTranscription(status: String?) {
@@ -100,7 +105,12 @@ final class AudioPlaybackController: ObservableObject {
         transcriptionText = timedWords.isEmpty
             ? EnglishTextFormatter.formatArticle(whisperText)
             : alignedText(from: timedWords)
-        transcriptionStatus = "已转写 \(completed)/\(total) 段，继续处理中…"
+        if !transcriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            canReadWhileTranscribing = true
+        }
+        transcriptionStatus = canReadWhileTranscribing
+            ? "已转写 \(completed)/\(total) 段 · 后台继续识别"
+            : "已转写 \(completed)/\(total) 段，继续处理中…"
         updateCurrentWordIndex()
     }
 
@@ -113,10 +123,11 @@ final class AudioPlaybackController: ObservableObject {
         transcriptionText = ""
         transcriptionStatus = nil
         isTranscribing = false
+        canReadWhileTranscribing = false
     }
 
     func togglePlayback() {
-        guard !isTranscribing, let player else { return }
+        guard canControlPlayback, let player else { return }
         if isPlaying {
             player.pause()
             isPlaying = false
@@ -137,7 +148,7 @@ final class AudioPlaybackController: ObservableObject {
     }
 
     func seek(to seconds: Double) {
-        guard !isTranscribing, let player else { return }
+        guard canControlPlayback, let player else { return }
         let target = min(max(0, seconds), duration)
         isSeeking = true
         currentTime = target
@@ -162,7 +173,7 @@ final class AudioPlaybackController: ObservableObject {
     /// so tapping a sentence's first word keeps the player and the visible text
     /// on the same word.
     func seek(toWordAt index: Int) {
-        guard !isTranscribing, !timedWords.isEmpty else { return }
+        guard canControlPlayback, !timedWords.isEmpty else { return }
         let clamped = min(max(0, index), timedWords.count - 1)
         // 更新当前词的判定允许 0.05 秒的提前量，回退同样的距离，
         // 避免短词的起始时间落在容差内时高亮落到下一个词。
@@ -318,7 +329,16 @@ final class AudioPlaybackController: ObservableObject {
 
     private func updateCurrentWordIndex() {
         guard !timedWords.isEmpty else { currentSpokenWordIndex = nil; return }
-        currentSpokenWordIndex = timedWords.lastIndex { $0.startTime <= currentTime + 0.05 } ?? 0
+        if isTranscribing, canReadWhileTranscribing,
+           let last = timedWords.last,
+           currentTime > last.startTime + last.duration + 0.05 {
+            currentSpokenWordIndex = nil
+            return
+        }
+        let wordIndex = timedWords.lastIndex { $0.startTime <= currentTime + 0.05 } ?? 0
+        if currentSpokenWordIndex != wordIndex {
+            currentSpokenWordIndex = wordIndex
+        }
     }
 
     /// The reading view indexes words by whitespace, so its words must have the
@@ -369,6 +389,7 @@ final class AudioPlaybackController: ObservableObject {
         hasWhisperWordAlignment = true
         isPlaying = false
         isTranscribing = false
+        canReadWhileTranscribing = false
     }
 }
 

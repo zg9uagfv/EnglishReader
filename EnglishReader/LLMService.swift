@@ -21,7 +21,15 @@ final class LLMConfiguration: ObservableObject {
 
     @Published var baseURL: String { didSet { save() } }
     @Published var model: String { didSet { save() } }
-    @Published var apiKey: String { didSet { Keychain.save(apiKey) } }
+    @Published var apiKey: String {
+        didSet {
+            guard !isRestoringAPIKey else { return }
+            let value = apiKey
+            keychainSaveQueue.async { Keychain.save(value) }
+        }
+    }
+    private var isRestoringAPIKey = false
+    private let keychainSaveQueue = DispatchQueue(label: "EnglishReader.LLM.KeychainSave", qos: .utility)
     @Published var localWhisperEnabled: Bool { didSet { save() } }
     @Published var localWhisperModel: String { didSet { save() } }
     @Published var localWhisperModelDirectory: String { didSet { save() } }
@@ -41,7 +49,7 @@ final class LLMConfiguration: ObservableObject {
             : defaults.string(forKey: "llmModel")
                 ?? defaults.string(forKey: "llmTranslationModel")
                 ?? Self.openAIModel
-        apiKey = Keychain.load() ?? ""
+        apiKey = ""
         localWhisperEnabled = defaults.bool(forKey: "localWhisperEnabled")
         localWhisperModel = defaults.string(forKey: "localWhisperModel") ?? "mlx-community/whisper-large-v3-turbo"
         localWhisperModelDirectory = defaults.string(forKey: "localWhisperModelDirectory") ?? ""
@@ -56,6 +64,15 @@ final class LLMConfiguration: ObservableObject {
             defaults.set(baseURL, forKey: "llmBaseURL")
             defaults.set(model, forKey: "llmModel")
             defaults.set(true, forKey: Self.didApplyOpenAIServiceDefaultsKey)
+        }
+        Task.detached(priority: .utility) { [weak self] in
+            let savedKey = Keychain.load()
+            await MainActor.run {
+                guard let self, let savedKey, self.apiKey.isEmpty else { return }
+                self.isRestoringAPIKey = true
+                self.apiKey = savedKey
+                self.isRestoringAPIKey = false
+            }
         }
     }
 
@@ -213,6 +230,7 @@ enum LocalWhisperService {
         }
         let chunkLength = 60.0
         let chunkCount = Int(ceil(duration / chunkLength))
+        var hasReadableChunk = false
 
         for chunkIndex in 0..<chunkCount {
             try Task.checkCancellation()
@@ -238,7 +256,11 @@ enum LocalWhisperService {
                 arguments += ["--model_dir", modelDirectory]
             }
 
-            let result = try await run(executable: runtimePath, arguments: arguments)
+            let result = try await run(
+                executable: runtimePath,
+                arguments: arguments,
+                background: hasReadableChunk
+            )
             try Task.checkCancellation()
             guard result.status == 0 else {
                 throw LocalWhisperError.processFailed(summary(of: result.output))
@@ -257,6 +279,9 @@ enum LocalWhisperService {
                 }
             )
             onChunk(shifted, chunkIndex + 1, chunkCount)
+            if !shifted.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !shifted.words.isEmpty {
+                hasReadableChunk = true
+            }
         }
     }
 
@@ -308,13 +333,17 @@ enum LocalWhisperService {
         return String(lines.last ?? "未知错误")
     }
 
-    private static func run(executable: String, arguments: [String]) async throws -> (status: Int32, output: String) {
+    private static func run(
+        executable: String,
+        arguments: [String],
+        background: Bool
+    ) async throws -> (status: Int32, output: String) {
         try Task.checkCancellation()
         let cancellable = CancellableProcess()
         let process = cancellable.process
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                DispatchQueue.global(qos: .userInitiated).async {
+                DispatchQueue.global(qos: background ? .utility : .userInitiated).async {
                     do {
                         let logURL = FileManager.default.temporaryDirectory
                             .appendingPathComponent("EnglishReader-Whisper-log-\(UUID().uuidString)")

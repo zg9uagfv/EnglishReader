@@ -16,7 +16,15 @@ final class ElevenLabsSpeechConfiguration: ObservableObject {
     @Published var modelID: String { didSet { save() } }
     @Published var americanVoiceID: String { didSet { save() } }
     @Published var britishVoiceID: String { didSet { save() } }
-    @Published var apiKey: String { didSet { ElevenLabsSpeechKeychain.save(apiKey) } }
+    @Published var apiKey: String {
+        didSet {
+            guard !isRestoringAPIKey else { return }
+            let value = apiKey
+            keychainSaveQueue.async { ElevenLabsSpeechKeychain.save(value) }
+        }
+    }
+    private var isRestoringAPIKey = false
+    private let keychainSaveQueue = DispatchQueue(label: "EnglishReader.ElevenLabs.KeychainSave", qos: .utility)
 
     init() {
         let defaults = UserDefaults.standard
@@ -24,7 +32,16 @@ final class ElevenLabsSpeechConfiguration: ObservableObject {
         modelID = defaults.string(forKey: "elevenLabsSpeechModelID") ?? "eleven_flash_v2_5"
         americanVoiceID = defaults.string(forKey: "elevenLabsAmericanVoiceID") ?? Self.sampleAmericanVoiceID
         britishVoiceID = defaults.string(forKey: "elevenLabsBritishVoiceID") ?? Self.sampleBritishVoiceID
-        apiKey = ElevenLabsSpeechKeychain.load() ?? ""
+        apiKey = ""
+        Task.detached(priority: .utility) { [weak self] in
+            let savedKey = ElevenLabsSpeechKeychain.load()
+            await MainActor.run {
+                guard let self, let savedKey, self.apiKey.isEmpty else { return }
+                self.isRestoringAPIKey = true
+                self.apiKey = savedKey
+                self.isRestoringAPIKey = false
+            }
+        }
     }
 
     var isConfigured: Bool {
@@ -77,19 +94,16 @@ enum ElevenLabsSpeechService {
 
     static func synthesizeChildWords(
         _ words: [String],
-        pause: Double,
         speed: Double,
         settings: ElevenLabsSpeechSettings,
         previousText: String? = nil,
         nextText: String? = nil
     ) async throws -> TimedAudio {
         guard !words.isEmpty else { throw ElevenLabsSpeechError.invalidResponse }
-        let breakTag = String(format: "<break time=\"%.1fs\" />", locale: Locale(identifier: "en_US_POSIX"), min(3.0, max(0.5, pause)))
-        let separator = " \(breakTag) "
         var text = ""
         var wordOffsets: [Int] = []
         for word in words {
-            if !text.isEmpty { text += separator }
+            if !text.isEmpty { text += " " }
             wordOffsets.append(text.count)
             text += word
         }
@@ -138,7 +152,7 @@ enum ElevenLabsSpeechService {
         request.setValue(withTimestamps ? "application/json" : "audio/mpeg", forHTTPHeaderField: "Accept")
         // The article speed slider is calibrated for AVSpeechSynthesizer. ElevenLabs
         // accepts a narrower synthesis speed range of 0.7...1.2.
-        let voiceSpeed = min(1.2, max(0.7, speed / 0.45))
+        let voiceSpeed = min(1.2, max(0.7, speed / 0.45 * (withTimestamps ? 0.7 : 1.0)))
         var body: [String: Any] = [
             "text": text,
             "model_id": settings.modelID,

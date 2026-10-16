@@ -10,13 +10,14 @@ struct ContentView: View {
     @StateObject private var llmConfiguration = LLMConfiguration()
     @StateObject private var elevenLabsSpeechConfiguration = ElevenLabsSpeechConfiguration()
     @State private var text = ""
+    @State private var readingSentences: [ReadingSentence] = []
     @State private var accent: EnglishAccent = .american
     @State private var speed = 0.45
     @State private var settingsUpdateTask: Task<Void, Never>?
     @State private var localWhisperTask: Task<Void, Never>?
     @State private var localWhisperRequestID = UUID()
     @State private var childMode = false
-    @State private var wordPause = 1.0
+    @State private var wordPause = 0.5
     @State private var fontSize = 20.0
     @State private var fontStyle = DisplayFontStyle.system
     @State private var highlightedTokens: Set<String> = []
@@ -43,7 +44,7 @@ struct ContentView: View {
     @FocusState private var isAudioPlaybackRateFocused: Bool
 
     private var wordCount: Int {
-        text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        readingSentences.last.map { $0.wordOffset + $0.tokens.count } ?? 0
     }
 
     var body: some View {
@@ -119,6 +120,7 @@ struct ContentView: View {
                 isEditingText = false
             }
             .onChange(of: text) { updatedText in
+                updateReadingSentences(for: updatedText)
                 scheduleTranslation(for: updatedText)
                 guard isEditingText,
                       audio.hasAudio,
@@ -219,7 +221,7 @@ struct ContentView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
-            Text("\(wordCount) 个单词 · \(childMode ? "儿童逐词模式" : "自由阅读模式")")
+            Text("\(wordCount) 个单词 · \(childMode ? "儿童慢速模式" : "自由阅读模式")")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(ReaderTheme.primary)
         }
@@ -231,7 +233,7 @@ struct ContentView: View {
             Text(childMode ? "一起读英语吧！" : "英语阅读小伙伴")
                 .font(.headline)
                 .lineLimit(1)
-            Text("\(wordCount) 个单词 · \(childMode ? "儿童逐词模式" : "自由阅读模式")")
+            Text("\(wordCount) 个单词 · \(childMode ? "儿童慢速模式" : "自由阅读模式")")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(ReaderTheme.primary)
                 .lineLimit(1)
@@ -349,6 +351,7 @@ struct ContentView: View {
             }
             .onChange(of: activeSpokenWordIndex) { index in
                 guard let index else { return }
+                guard index % 12 == 0 || readingSentences.contains(where: { $0.wordOffset == index }) else { return }
                 withAnimation(.easeInOut(duration: 0.25)) {
                     proxy.scrollTo("spoken-word-\(index)", anchor: .center)
                 }
@@ -371,18 +374,17 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 260)
         } else {
-            VStack(alignment: .leading, spacing: max(12, fontSize * 0.65)) {
-                ForEach(formattedSentences.indices, id: \.self) { sentenceIndex in
-                    let sentence = formattedSentences[sentenceIndex]
-                    let tokens = tokens(for: sentence)
-                    let sentenceOffset = tokenOffset(for: sentenceIndex)
+            LazyVStack(alignment: .leading, spacing: max(12, fontSize * 0.65)) {
+                ForEach(readingSentences.indices, id: \.self) { sentenceIndex in
+                    let sentence = readingSentences[sentenceIndex]
+                    let tokens = sentence.tokens
                     VStack(alignment: .leading, spacing: 6) {
                         WrappingLayout(spacing: max(3, fontSize * 0.18)) {
                             ForEach(tokens.indices, id: \.self) { tokenIndex in
                                 readingTokenView(
                                     tokens[tokenIndex],
                                     id: "\(sentenceIndex)-\(tokenIndex)",
-                                    wordIndex: sentenceOffset + tokenIndex,
+                                    wordIndex: sentence.wordOffset + tokenIndex,
                                     isSentenceStart: tokenIndex == 0
                                 )
                             }
@@ -499,21 +501,17 @@ struct ContentView: View {
         )
     }
 
-    private var formattedSentences: [String] {
-        EnglishTextFormatter.sentences(in: text)
-    }
-
-    private func tokens(for sentence: String) -> [ReadingToken] {
-        sentence.components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .map(ReadingToken.init)
-    }
-
-    private func tokenOffset(for sentenceIndex: Int) -> Int {
-        guard sentenceIndex > 0 else { return 0 }
-        return formattedSentences[..<sentenceIndex].reduce(0) { total, sentence in
-            total + tokens(for: sentence).count
+    private func updateReadingSentences(for sourceText: String) {
+        var result: [ReadingSentence] = []
+        var offset = 0
+        for sentence in EnglishTextFormatter.sentences(in: sourceText) {
+            let tokens = sentence.components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+                .map(ReadingToken.init)
+            result.append(ReadingSentence(tokens: tokens, wordOffset: offset))
+            offset += tokens.count
         }
+        readingSentences = result
     }
 
     private var controls: some View {
@@ -646,10 +644,15 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if audio.isTranscribing {
+            if audio.isTranscribing && !audio.canReadWhileTranscribing {
                 ProgressView()
                     .progressViewStyle(.linear)
-                Label("已转写的内容会先显示，后续内容完成后继续追加。", systemImage: "waveform.badge.magnifyingglass")
+                Label(
+                    llmConfiguration.localWhisperEnabled
+                        ? "首段识别完成后即可阅读和播放。"
+                        : "正在识别音频内容…",
+                    systemImage: "waveform.badge.magnifyingglass"
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -663,7 +666,7 @@ struct ContentView: View {
                     in: 0...max(audio.duration, 0.01)
                 )
                 .tint(.accentColor)
-                .disabled(audio.isTranscribing)
+                .disabled(!audio.canControlPlayback)
 
                 HStack {
                     Text(audio.formattedTime(audio.currentTime)).monospacedDigit()
@@ -679,7 +682,7 @@ struct ContentView: View {
                     .frame(minWidth: 110)
             }
             .buttonStyle(ReaderFilledButtonStyle())
-            .disabled(audio.isTranscribing)
+            .disabled(!audio.canControlPlayback)
         }
         .padding(16)
         .background(ReaderTheme.mint.opacity(0.27), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -882,6 +885,9 @@ struct ContentView: View {
             let contentType = resourceValues.contentType ?? UTType(filenameExtension: url.pathExtension)
             let fileExtension = url.pathExtension.lowercased()
             if contentType?.conforms(to: .audio) == true {
+                isEditingText = false
+                audioTranscriptText = ""
+                text = ""
                 let configuration = llmConfiguration
                 let usesLocalWhisper = configuration.localWhisperEnabled
                 audio.load(
@@ -1055,17 +1061,21 @@ private struct WordSelection: Identifiable {
     let word: String
 }
 
+private struct ReadingSentence {
+    let tokens: [ReadingToken]
+    let wordOffset: Int
+}
+
 private struct ReadingToken {
     let display: String
+    let lookupWord: String?
 
     init(_ value: String) {
-        display = value + " "
-    }
-
-    var lookupWord: String? {
+        let displayText = value + " "
+        display = displayText
         let allowed = CharacterSet.letters.union(CharacterSet(charactersIn: "'-’"))
-        let cleaned = display.unicodeScalars.filter { allowed.contains($0) }
+        let cleaned = displayText.unicodeScalars.filter { allowed.contains($0) }
         let word = String(String.UnicodeScalarView(cleaned)).trimmingCharacters(in: CharacterSet(charactersIn: "'-’"))
-        return word.range(of: "^[A-Za-z]+(?:['’-][A-Za-z]+)*$", options: .regularExpression) == nil ? nil : word
+        lookupWord = word.range(of: "^[A-Za-z]+(?:['’-][A-Za-z]+)*$", options: .regularExpression) == nil ? nil : word
     }
 }
