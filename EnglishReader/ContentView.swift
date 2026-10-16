@@ -16,8 +16,8 @@ struct ContentView: View {
     @State private var settingsUpdateTask: Task<Void, Never>?
     @State private var localWhisperTask: Task<Void, Never>?
     @State private var localWhisperRequestID = UUID()
-    @State private var childMode = false
-    @State private var wordPause = 0.5
+    @AppStorage("childModeEnabled") private var childMode = false
+    @AppStorage("childWordPause") private var wordPause = 0.5
     @State private var fontSize = 20.0
     @State private var fontStyle = DisplayFontStyle.system
     @State private var highlightedTokens: Set<String> = []
