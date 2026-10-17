@@ -144,7 +144,7 @@ struct ContentView: View {
             .background {
                 appleTranslationRunner
             }
-            .navigationTitle("英文文章朗读")
+            .navigationTitle("英语伴读")
             .fileImporter(
                 isPresented: $isImporting,
                 allowedContentTypes: [.item],
@@ -215,7 +215,7 @@ struct ContentView: View {
 
     private var headerText: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(childMode ? "一起读英语吧！" : "英语阅读小伙伴")
+            Text(childMode ? "一起读英语吧！" : "英语伴读")
                 .font(.title3.weight(.bold))
             Text("粘贴内容，或选择文本、Markdown、音频文件")
                 .font(.callout)
@@ -230,7 +230,7 @@ struct ContentView: View {
 
     private var headerCompactText: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(childMode ? "一起读英语吧！" : "英语阅读小伙伴")
+            Text(childMode ? "一起读英语吧！" : "英语伴读")
                 .font(.headline)
                 .lineLimit(1)
             Text("\(wordCount) 个单词 · \(childMode ? "儿童慢速模式" : "自由阅读模式")")

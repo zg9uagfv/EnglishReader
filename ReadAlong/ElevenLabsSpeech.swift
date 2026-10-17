@@ -25,7 +25,7 @@ final class ElevenLabsSpeechConfiguration: ObservableObject {
         }
     }
     private var isRestoringAPIKey = false
-    private let keychainSaveQueue = DispatchQueue(label: "EnglishReader.ElevenLabs.KeychainSave", qos: .utility)
+    private let keychainSaveQueue = DispatchQueue(label: "ReadAlong.ElevenLabs.KeychainSave", qos: .utility)
 
     init() {
         let defaults = UserDefaults.standard
@@ -375,7 +375,8 @@ enum ElevenLabsSpeechError: LocalizedError {
 }
 
 private enum ElevenLabsSpeechKeychain {
-    private static let service = "EnglishReader.ElevenLabsSpeech"
+    private static let service = "ReadAlong.ElevenLabsSpeech"
+    private static let legacyService = "EnglishReader.ElevenLabsSpeech"
     private static let account = "apiKey"
 
     static func save(_ value: String) {
@@ -389,6 +390,10 @@ private enum ElevenLabsSpeechKeychain {
     }
 
     static func load() -> String? {
+        load(service: service) ?? load(service: legacyService)
+    }
+
+    private static func load(service: String) -> String? {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,

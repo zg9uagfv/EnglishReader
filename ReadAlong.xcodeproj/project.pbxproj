@@ -6,7 +6,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10000000000000000000001 /* EnglishReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* EnglishReaderApp.swift */; };
+		A10000000000000000000001 /* ReadAlongApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ReadAlongApp.swift */; };
 		A10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ContentView.swift */; };
 		A10000000000000000000003 /* SpeechController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* SpeechController.swift */; };
 		A10000000000000000000004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* Assets.xcassets */; };
@@ -21,11 +21,11 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A20000000000000000000001 /* EnglishReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishReaderApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000001 /* ReadAlongApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAlongApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* SpeechController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechController.swift; sourceTree = "<group>"; };
 		A20000000000000000000004 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		A20000000000000000000005 /* EnglishReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EnglishReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000005 /* ReadAlong.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadAlong.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000006 /* WrappingLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappingLayout.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* WordDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordDetailView.swift; sourceTree = "<group>"; };
@@ -49,15 +49,15 @@
 		A40000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				A40000000000000000000002 /* EnglishReader */,
+				A40000000000000000000002 /* ReadAlong */,
 				A40000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		A40000000000000000000002 /* EnglishReader */ = {
+		A40000000000000000000002 /* ReadAlong */ = {
 			isa = PBXGroup;
 			children = (
-				A20000000000000000000001 /* EnglishReaderApp.swift */,
+				A20000000000000000000001 /* ReadAlongApp.swift */,
 				A20000000000000000000002 /* ContentView.swift */,
 				A20000000000000000000003 /* SpeechController.swift */,
 				A20000000000000000000004 /* Assets.xcassets */,
@@ -70,19 +70,19 @@
 				A2000000000000000000000C /* LLMService.swift */,
 				A2000000000000000000000D /* ElevenLabsSpeech.swift */,
 			);
-			path = EnglishReader;
+			path = ReadAlong;
 			sourceTree = "<group>";
 		};
 		A40000000000000000000003 /* Products */ = {
 			isa = PBXGroup;
-			children = (A20000000000000000000005 /* EnglishReader.app */);
+			children = (A20000000000000000000005 /* ReadAlong.app */);
 			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A50000000000000000000001 /* EnglishReader */ = {
+		A50000000000000000000001 /* ReadAlong */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A60000000000000000000002 /* Build configuration list for PBXNativeTarget */;
 			buildPhases = (
@@ -92,10 +92,10 @@
 			);
 			buildRules = ();
 			dependencies = ();
-			name = EnglishReader;
+			name = ReadAlong;
 			packageProductDependencies = ();
-			productName = EnglishReader;
-			productReference = A20000000000000000000005 /* EnglishReader.app */;
+			productName = ReadAlong;
+			productReference = A20000000000000000000005 /* ReadAlong.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -119,7 +119,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			packageReferences = ();
-			targets = (A50000000000000000000001 /* EnglishReader */);
+			targets = (A50000000000000000000001 /* ReadAlong */);
 		};
 /* End PBXProject section */
 
@@ -139,7 +139,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000001 /* EnglishReaderApp.swift in Sources */,
+				A10000000000000000000001 /* ReadAlongApp.swift in Sources */,
 				A10000000000000000000002 /* ContentView.swift in Sources */,
 				A10000000000000000000003 /* SpeechController.swift in Sources */,
 				A10000000000000000000005 /* WrappingLayout.swift in Sources */,
@@ -167,13 +167,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "英文文章朗读";
+				INFOPLIST_KEY_CFBundleDisplayName = "英语伴读";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于将上传的英语音频转换为可同步阅读的文本。";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 2.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.EnglishReader;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ReadAlong;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -191,13 +191,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "英文文章朗读";
+				INFOPLIST_KEY_CFBundleDisplayName = "英语伴读";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于将上传的英语音频转换为可同步阅读的文本。";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 2.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.EnglishReader;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ReadAlong;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";

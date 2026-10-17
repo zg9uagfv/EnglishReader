@@ -7,7 +7,7 @@
 set -eu
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="EnglishReader"
+APP_NAME="ReadAlong"
 CONFIGURATION="Release"
 DERIVED_DATA="$PROJECT_DIR/build/Release"
 APP_BUNDLE="$DERIVED_DATA/Build/Products/$CONFIGURATION/$APP_NAME.app"

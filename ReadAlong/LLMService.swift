@@ -29,7 +29,7 @@ final class LLMConfiguration: ObservableObject {
         }
     }
     private var isRestoringAPIKey = false
-    private let keychainSaveQueue = DispatchQueue(label: "EnglishReader.LLM.KeychainSave", qos: .utility)
+    private let keychainSaveQueue = DispatchQueue(label: "ReadAlong.LLM.KeychainSave", qos: .utility)
     @Published var localWhisperEnabled: Bool { didSet { save() } }
     @Published var localWhisperModel: String { didSet { save() } }
     @Published var localWhisperModelDirectory: String { didSet { save() } }
@@ -92,6 +92,9 @@ final class LLMConfiguration: ObservableObject {
 
     private static func detectLocalWhisperRuntime() -> String {
         let candidates = [
+            NSHomeDirectory() + "/.local/share/readalong-whisper/bin/python",
+            NSHomeDirectory() + "/Library/Application Support/ReadAlong/whisper/bin/python",
+            // Keep existing local runtimes usable after upgrading from EnglishReader.
             NSHomeDirectory() + "/.local/share/englishreader-whisper/bin/python",
             NSHomeDirectory() + "/Library/Application Support/EnglishReader/whisper/bin/python",
         ]
@@ -219,7 +222,7 @@ enum LocalWhisperService {
         }
 
         let outputDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("EnglishReader-Whisper-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("ReadAlong-Whisper-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: outputDirectory) }
 
@@ -346,7 +349,7 @@ enum LocalWhisperService {
                 DispatchQueue.global(qos: background ? .utility : .userInitiated).async {
                     do {
                         let logURL = FileManager.default.temporaryDirectory
-                            .appendingPathComponent("EnglishReader-Whisper-log-\(UUID().uuidString)")
+                            .appendingPathComponent("ReadAlong-Whisper-log-\(UUID().uuidString)")
                         FileManager.default.createFile(atPath: logURL.path, contents: nil)
                         let log = try FileHandle(forWritingTo: logURL)
                         defer {
@@ -406,15 +409,23 @@ private enum LocalWhisperError: LocalizedError {
 }
 
 private enum Keychain {
+    private static let service = "ReadAlong.LLM"
+    private static let legacyService = "EnglishReader.LLM"
+    private static let account = "apiKey"
+
     static func save(_ value: String) {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "EnglishReader.LLM", kSecAttrAccount as String: "apiKey"]
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
         SecItemDelete(query as CFDictionary)
         var item = query
         item[kSecValueData as String] = value.data(using: .utf8)
         SecItemAdd(item as CFDictionary, nil)
     }
     static func load() -> String? {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "EnglishReader.LLM", kSecAttrAccount as String: "apiKey", kSecReturnData as String: true]
+        load(service: service) ?? load(service: legacyService)
+    }
+
+    private static func load(service: String) -> String? {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecReturnData as String: true]
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)

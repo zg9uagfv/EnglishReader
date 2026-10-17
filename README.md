@@ -1,6 +1,6 @@
-# EnglishReader
+# ReadAlong · 英语伴读
 
-一个使用 SwiftUI 制作的英文阅读与跟读应用，同时支持 macOS 与 iPad。
+一个使用 SwiftUI 制作的英语伴读应用，同时支持 macOS 与 iPad。导入文章或音频后，可边听边读、跟读，并获得逐词高亮与点词学习支持。
 
 ## 功能
 
@@ -32,15 +32,15 @@
 
 ## 编译与运行
 
-1. 使用 Xcode 打开 `EnglishReader.xcodeproj`。
-2. 在 Scheme 中选择 `EnglishReader`，并选择 `My Mac` 或 iPad 模拟器/真机。
+1. 使用 Xcode 打开 `ReadAlong.xcodeproj`。
+2. 在 Scheme 中选择 `ReadAlong`，并选择 `My Mac` 或 iPad 模拟器/真机。
 3. 点击 Run（`⌘R`）编译并启动。
 
 也可在项目根目录通过命令行构建 macOS Debug 版本：
 
 ```bash
-xcodebuild -project EnglishReader.xcodeproj \
-  -scheme EnglishReader \
+xcodebuild -project ReadAlong.xcodeproj \
+  -scheme ReadAlong \
   -sdk macosx \
   -configuration Debug \
   CODE_SIGNING_ALLOWED=NO build
@@ -51,7 +51,7 @@ xcodebuild -project EnglishReader.xcodeproj \
 一条命令构建 Release 并生成 macOS 安装包：
 
 ```bash
-scripts/package-make.sh           # 生成 build/EnglishReader-<版本>.pkg
+scripts/package-make.sh           # 生成 build/ReadAlong-<版本>.pkg
 scripts/package-make.sh install   # 生成后安装到 /Applications（需要管理员密码）
 ```
 
@@ -87,8 +87,8 @@ scripts/package-make.sh install   # 生成后安装到 /Applications（需要管
 本地转写使用 `whispermlx` 的 MLX 运行时；适合 M 系列芯片。新设备推荐使用仓库内的一键脚本（会安装运行时、对齐数据、默认高精度模型，构建并启动 macOS Debug 版）：
 
 ```bash
-git clone git@github.com:zg9uagfv/EnglishReader.git
-cd EnglishReader
+git clone <仓库地址> ReadAlong
+cd ReadAlong
 ./scripts/setup-local-whisper.sh
 ```
 
@@ -101,22 +101,22 @@ cd EnglishReader
 脚本完成后会显示需要填入应用偏好的 Python 路径。若需要手动部署或使用自定义模型，执行以下步骤：
 
 ```bash
-python3 -m venv "$HOME/.local/share/englishreader-whisper"
-"$HOME/.local/share/englishreader-whisper/bin/pip" install --upgrade pip
-"$HOME/.local/share/englishreader-whisper/bin/pip" install whispermlx
+python3 -m venv "$HOME/.local/share/readalong-whisper"
+"$HOME/.local/share/readalong-whisper/bin/pip" install --upgrade pip
+"$HOME/.local/share/readalong-whisper/bin/pip" install whispermlx
 ```
 
 WhisperMLX 的逐词对齐还需要 NLTK 的 `punkt_tab` 数据：
 
 ```bash
-"$HOME/.local/share/englishreader-whisper/bin/python" -m nltk.downloader punkt_tab
+"$HOME/.local/share/readalong-whisper/bin/python" -m nltk.downloader punkt_tab
 ```
 
 如果电脑通过可信代理联网，NLTK 可能拒绝代理下载。确认代理可信后，可只为这一次下载运行：
 
 ```bash
 NLTK_ALLOW_PROXIED_URLOPEN=1 \
-  "$HOME/.local/share/englishreader-whisper/bin/python" -m nltk.downloader punkt_tab
+  "$HOME/.local/share/readalong-whisper/bin/python" -m nltk.downloader punkt_tab
 ```
 
 然后在应用的“偏好设置 → 本地 Whisper”中：
@@ -124,7 +124,7 @@ NLTK_ALLOW_PROXIED_URLOPEN=1 \
 1. 勾选“优先使用本地 Whisper”。
 2. 模型名填写 `mlx-community/whisper-large-v3-turbo`（高精度推荐）；首次运行会自动下载模型。
 3. Python / Whisper 运行时填写虚拟环境中的 Python 路径，例如：
-   `~/.local/share/englishreader-whisper/bin/python`。
+   `~/.local/share/readalong-whisper/bin/python`。
 4. 模型目录可留空，或填写自定义的模型缓存目录。
 
 `whisper-large-v3-turbo` 权重约 1.6GB。M1/M2 且 24GB 统一内存的 MacBook 适合单文件高精度转写；首次下载和长音频推理需要较长时间。长音频会按约 60 秒分段转写：第一段有可读文本后即可阅读、播放和拖动进度，剩余部分在后台继续识别并追加，同时保留逐词时间戳用于进度同步。
